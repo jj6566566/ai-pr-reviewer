@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.routers import review
+from backend.routers import review, webhook
 
 app = FastAPI(
     title="AI PR Review",
@@ -19,7 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(review.router)
-
+app.include_router(webhook.router)
 
 @app.get("/api/health")
 async def health():
