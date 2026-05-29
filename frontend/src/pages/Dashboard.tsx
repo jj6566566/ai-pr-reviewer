@@ -64,6 +64,7 @@ import UrlParser from '../components/UrlParser';
 import LoginButton from '../components/LoginButton';
 import RepoSelector from '../components/RepoSelector';
 import PRList from '../components/PRList';
+import PRComparisonMatrix from '../components/PRComparisonMatrix';
 import { useAuth } from '../contexts/AuthContext';
 
 // ===== 页面状态类型 =====
@@ -1767,7 +1768,10 @@ export default function Dashboard() {
             />
           )}
           {batchStatus === 'success' && batchResult && (
-            <BatchResultView data={batchResult} onReset={handleBatchReset} />
+            <>
+              <PRComparisonMatrix results={batchResult.results} />
+              <BatchResultView data={batchResult} onReset={handleBatchReset} />
+            </>
           )}
         </>
       )}
