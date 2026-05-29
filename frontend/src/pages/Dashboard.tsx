@@ -68,6 +68,7 @@ import {
   SEVERITY_ORDER,
   RISK_LEVEL_SCORE_CONFIG,
 } from '../types/review';
+import UrlParser from '../components/UrlParser';
 
 // ===== 页面状态类型 =====
 
@@ -2187,7 +2188,39 @@ export default function Dashboard() {
 
       {mode === 'batch' && (
         <>
-          <BatchInputForm onSubmit={handleBatchAnalyze} isLoading={batchStatus === 'loading'} />
+          {batchStatus === 'idle' && (
+            <>
+              <div className="w-full max-w-2xl mx-auto mb-6">
+                <UrlParser
+                  onConfirm={(items) => {
+                    const mapped: BatchAnalyzeItem[] = items.map((item) => ({
+                      owner: item.repo_owner,
+                      repo: item.repo_name,
+                      pr_number: item.pr_number,
+                    }));
+                    handleBatchAnalyze(mapped);
+                  }}
+                />
+              </div>
+
+              <div className="w-full max-w-2xl mx-auto mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-slate-700/50" />
+                  <span className="text-xs text-slate-500 flex-shrink-0">或</span>
+                  <div className="flex-1 h-px bg-slate-700/50" />
+                </div>
+              </div>
+
+              <details className="w-full max-w-2xl mx-auto mb-4">
+                <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400">
+                  手动添加 PR
+                </summary>
+                <div className="mt-2">
+                  <BatchInputForm onSubmit={handleBatchAnalyze} isLoading={false} />
+                </div>
+              </details>
+            </>
+          )}
 
           {batchStatus === 'loading' && <LoadingState />}
           {batchStatus === 'error' && (
