@@ -7,6 +7,7 @@ class AnalyzeRequest(BaseModel):
     owner: str = Field(..., description="仓库所有者")
     repo: str = Field(..., description="仓库名称")
     pr_number: int = Field(..., description="PR 编号")
+    mode_id: Optional[int] = Field(None, description="评审模式 ID，不传使用默认模式")
 
 
 class FileInfo(BaseModel):
@@ -118,3 +119,30 @@ class BatchAnalyzeResponse(BaseModel):
     results: list[AnalyzeResponse]
     overview: BatchOverview
     duplicate_analysis: Optional[CrossPRDuplicateResult] = None
+
+
+class ReviewModeCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str = Field(..., min_length=1, max_length=500)
+    system_prompt: str = Field(..., min_length=1)
+    temperature: float = Field(default=0.3, ge=0.0, le=2.0)
+
+
+class ReviewModeUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, min_length=1, max_length=500)
+    system_prompt: Optional[str] = Field(None, min_length=1)
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    sort_order: Optional[int] = None
+
+
+class ReviewModeResponse(BaseModel):
+    id: int
+    name: str
+    description: str
+    system_prompt: str
+    is_preset: bool
+    temperature: float
+    sort_order: int
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None

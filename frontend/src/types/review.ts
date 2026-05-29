@@ -14,6 +14,8 @@ export interface AnalyzeRequest {
   repo: string;
   /** PR 编号 */
   prNumber: number;
+  /** 评审模式 ID（可选） */
+  modeId?: number;
 }
 
 // ===== 后端响应类型（与 JSON 结构一一对应） =====
@@ -327,3 +329,15 @@ export const RISK_LEVEL_SCORE_CONFIG: Record<
     ringClass: 'ring-red-500/30',
   },
 };
+
+export interface ReviewMode {
+  id: number;
+  name: string;
+  description: string;
+  system_prompt: string;
+  is_preset: boolean;
+  temperature: number;
+  sort_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+}

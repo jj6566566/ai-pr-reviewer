@@ -28,8 +28,11 @@ import {
   Zap,
   Layers,
   GitMerge,
+  Settings,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
-import { analyzePR, fetchHistory, fetchHistoryDetail, analyzeBatch } from '../api/review';
+import { analyzePR, fetchHistory, fetchHistoryDetail, analyzeBatch, fetchModes, createMode, updateMode, deleteMode } from '../api/review';
 import type {
   AnalyzeResponse,
   RiskItem,
@@ -42,6 +45,7 @@ import type {
   RiskLevel,
   CrossPRDuplicateResult,
   RiskSeverity,
+  ReviewMode,
 } from '../types/review';
 import {
   RISK_SEVERITY_CONFIG,
@@ -80,7 +84,7 @@ function BrandHeader() {
 
 /** 输入表单区域 Props */
 interface InputFormProps {
-  onSubmit: (owner: string, repo: string, prNumber: number) => void;
+  onSubmit: (owner: string, repo: string, prNumber: number, modeId?: number) => void;
   isLoading: boolean;
 }
 
@@ -89,6 +93,38 @@ function InputForm({ onSubmit, isLoading }: InputFormProps) {
   const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
   const [prNumber, setPrNumber] = useState('');
+  const [modes, setModes] = useState<ReviewMode[]>([]);
+  const [selectedModeId, setSelectedModeId] = useState<number | undefined>(undefined);
+  const [modesLoading, setModesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadModes = async () => {
+      try {
+        setModesLoading(true);
+        const data = await fetchModes();
+        if (!cancelled) {
+          setModes(data);
+          const defaultMode = data.length > 0 ? data[0] : null;
+          if (defaultMode) {
+            setSelectedModeId(defaultMode.id);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setModes([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setModesLoading(false);
+        }
+      }
+    };
+    loadModes();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -100,7 +136,7 @@ function InputForm({ onSubmit, isLoading }: InputFormProps) {
       return;
     }
 
-    onSubmit(trimmedOwner, trimmedRepo, num);
+    onSubmit(trimmedOwner, trimmedRepo, num, selectedModeId);
   };
 
   const isFormValid =
@@ -111,6 +147,9 @@ function InputForm({ onSubmit, isLoading }: InputFormProps) {
 
   const inputBaseClass =
     'w-full bg-slate-800/60 border border-slate-700/60 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 outline-none transition-all duration-200 focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/30 focus:bg-slate-800/80';
+
+  const selectClass =
+    'w-full bg-slate-800/60 border border-slate-700/60 rounded-lg px-4 py-2.5 text-sm text-slate-200 outline-none focus:border-sky-500/60';
 
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto mb-10">
@@ -154,6 +193,34 @@ function InputForm({ onSubmit, isLoading }: InputFormProps) {
             className={`${inputBaseClass} pl-9`}
           />
         </div>
+      </div>
+
+      {/* 评审模式选择器 */}
+      <div className="mb-3">
+        {modesLoading ? (
+          <div className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-500">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            加载模式...
+          </div>
+        ) : modes.length > 0 ? (
+          <select
+            value={selectedModeId ?? ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedModeId(val ? Number(val) : undefined);
+            }}
+            disabled={isLoading}
+            className={selectClass}
+          >
+            {modes.map((mode) => (
+              <option key={mode.id} value={mode.id}>
+                {mode.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="text-sm text-slate-500 px-4 py-2.5">无可用模式</div>
+        )}
       </div>
 
       {/* 提交按钮 */}
@@ -1367,6 +1434,397 @@ function HistoryPanel({ refreshTrigger }: HistoryPanelProps) {
   );
 }
 
+// ===== 评审模式管理面板 =====
+
+interface ReviewModePanelProps {
+  modes: ReviewMode[];
+  onModesChanged: () => void;
+}
+
+function ReviewModePanel({ modes, onModesChanged }: ReviewModePanelProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingMode, setEditingMode] = useState<ReviewMode | null>(null);
+
+  const presetModes = modes.filter((m) => m.is_preset);
+  const customModes = modes.filter((m) => !m.is_preset);
+
+  return (
+    <div className="max-w-3xl mx-auto mb-10">
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm">
+        <button
+          onClick={() => setIsExpanded((v) => !v)}
+          className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-800/20 transition-colors rounded-xl"
+        >
+          <div className="flex items-center gap-2.5">
+            <Settings className="w-5 h-5 text-sky-400" />
+            <h2 className="text-lg font-semibold text-slate-200">评审模式</h2>
+            <span className="text-xs text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
+              {modes.length}
+            </span>
+          </div>
+          {isExpanded ? (
+            <ChevronUp className="w-5 h-5 text-slate-400" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-slate-400" />
+          )}
+        </button>
+
+        {isExpanded && (
+          <div className="px-5 pb-5 border-t border-slate-700/50 pt-3">
+            {modes.length === 0 && (
+              <div className="py-8 text-center">
+                <Settings className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+                <p className="text-sm text-slate-500">暂无评审模式</p>
+              </div>
+            )}
+
+            {presetModes.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                  预设模式
+                </p>
+                <div className="space-y-2">
+                  {presetModes.map((mode) => (
+                    <div
+                      key={mode.id}
+                      className="rounded-lg bg-slate-800/60 border border-slate-700/50 p-3"
+                    >
+                      <div className="flex items-start gap-2 mb-1">
+                        <span className="text-sm font-semibold text-slate-200">{mode.name}</span>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] bg-sky-950/50 text-sky-400">
+                          预设
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed mb-1.5">
+                        {mode.description}
+                      </p>
+                      <span className="text-[11px] text-slate-500">
+                        温度: {mode.temperature.toFixed(1)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {customModes.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                  自定义模式
+                </p>
+                <div className="space-y-2">
+                  {customModes.map((mode) => (
+                    <div
+                      key={mode.id}
+                      className="rounded-lg bg-slate-800/60 border border-slate-700/50 p-3"
+                    >
+                      {editingMode?.id === mode.id ? (
+                        <ModeEditForm
+                          mode={mode}
+                          onCancel={() => setEditingMode(null)}
+                          onSaved={() => {
+                            setEditingMode(null);
+                            onModesChanged();
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <span className="text-sm font-semibold text-slate-200">{mode.name}</span>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => setEditingMode(mode)}
+                                className="p-1 rounded text-slate-500 hover:text-sky-400 hover:bg-sky-950/30 transition-colors"
+                                title="编辑"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await deleteMode(mode.id);
+                                    onModesChanged();
+                                  } catch {
+                                    /* ignore */
+                                  }
+                                }}
+                                className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+                                title="删除"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-400 leading-relaxed mb-1.5">
+                            {mode.description}
+                          </p>
+                          <span className="text-[11px] text-slate-500">
+                            温度: {mode.temperature.toFixed(1)}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {showCreateForm ? (
+              <ModeCreateForm
+                onCancel={() => setShowCreateForm(false)}
+                onCreated={() => {
+                  setShowCreateForm(false);
+                  onModesChanged();
+                }}
+              />
+            ) : (
+              <button
+                onClick={() => setShowCreateForm(true)}
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg py-2 border border-dashed border-slate-600/50 text-slate-400 text-sm hover:border-sky-500/40 hover:text-sky-400 transition-all duration-200"
+              >
+                <Plus className="w-4 h-4" />
+                新建模式
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface ModeCreateFormProps {
+  onCancel: () => void;
+  onCreated: () => void;
+}
+
+function ModeCreateForm({ onCancel, onCreated }: ModeCreateFormProps) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [temperature, setTemperature] = useState('0.7');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !description.trim() || !systemPrompt.trim()) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await createMode({
+        name: name.trim(),
+        description: description.trim(),
+        system_prompt: systemPrompt.trim(),
+        temperature: parseFloat(temperature) || 0.7,
+      });
+      onCreated();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '创建失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputClass =
+    'w-full bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/60';
+
+  return (
+    <form onSubmit={handleSubmit} className="rounded-lg bg-slate-800/60 border border-slate-700/50 p-4 mb-3">
+      <p className="text-sm font-semibold text-slate-200 mb-3">新建评审模式</p>
+
+      {error && (
+        <div className="mb-3 rounded-lg bg-red-950/30 border border-red-500/20 px-3 py-2 text-xs text-red-400">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-2.5">
+        <div>
+          <input
+            type="text"
+            placeholder="模式名称"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={submitting}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <input
+            type="text"
+            placeholder="模式描述"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={submitting}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <textarea
+            placeholder="System Prompt"
+            value={systemPrompt}
+            onChange={(e) => setSystemPrompt(e.target.value)}
+            disabled={submitting}
+            rows={4}
+            className={`${inputClass} resize-y`}
+          />
+        </div>
+        <div>
+          <input
+            type="number"
+            step="0.1"
+            min="0"
+            max="2"
+            placeholder="温度 (0.0-2.0)"
+            value={temperature}
+            onChange={(e) => setTemperature(e.target.value)}
+            disabled={submitting}
+            className={inputClass}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 mt-3">
+        <button
+          type="submit"
+          disabled={submitting || !name.trim() || !description.trim() || !systemPrompt.trim()}
+          className="flex-1 rounded-lg py-2 text-sm font-semibold bg-gradient-to-r from-sky-500 to-violet-500 text-white hover:from-sky-400 hover:to-violet-400 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {submitting ? (
+            <span className="flex items-center justify-center gap-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              创建中...
+            </span>
+          ) : (
+            '创建'
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          className="px-4 py-2 rounded-lg text-sm text-slate-400 border border-slate-700/60 hover:text-slate-300 hover:border-slate-600/60 transition-colors"
+        >
+          取消
+        </button>
+      </div>
+    </form>
+  );
+}
+
+interface ModeEditFormProps {
+  mode: ReviewMode;
+  onCancel: () => void;
+  onSaved: () => void;
+}
+
+function ModeEditForm({ mode, onCancel, onSaved }: ModeEditFormProps) {
+  const [name, setName] = useState(mode.name);
+  const [description, setDescription] = useState(mode.description);
+  const [systemPrompt, setSystemPrompt] = useState(mode.system_prompt);
+  const [temperature, setTemperature] = useState(String(mode.temperature));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !description.trim() || !systemPrompt.trim()) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await updateMode(mode.id, {
+        name: name.trim(),
+        description: description.trim(),
+        system_prompt: systemPrompt.trim(),
+        temperature: parseFloat(temperature) || 0.7,
+      });
+      onSaved();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '更新失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputClass =
+    'w-full bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/60';
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {error && (
+        <div className="mb-2 rounded-lg bg-red-950/30 border border-red-500/20 px-3 py-1.5 text-xs text-red-400">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <input
+          type="text"
+          placeholder="模式名称"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={submitting}
+          className={inputClass}
+        />
+        <input
+          type="text"
+          placeholder="模式描述"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          disabled={submitting}
+          className={inputClass}
+        />
+        <textarea
+          placeholder="System Prompt"
+          value={systemPrompt}
+          onChange={(e) => setSystemPrompt(e.target.value)}
+          disabled={submitting}
+          rows={3}
+          className={`${inputClass} resize-y`}
+        />
+        <input
+          type="number"
+          step="0.1"
+          min="0"
+          max="2"
+          placeholder="温度"
+          value={temperature}
+          onChange={(e) => setTemperature(e.target.value)}
+          disabled={submitting}
+          className={inputClass}
+        />
+      </div>
+
+      <div className="flex items-center gap-2 mt-2">
+        <button
+          type="submit"
+          disabled={submitting || !name.trim() || !description.trim() || !systemPrompt.trim()}
+          className="flex-1 rounded-lg py-1.5 text-xs font-semibold bg-gradient-to-r from-sky-500 to-violet-500 text-white hover:from-sky-400 hover:to-violet-400 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {submitting ? (
+            <span className="flex items-center justify-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              保存中...
+            </span>
+          ) : (
+            '保存'
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          className="px-3 py-1.5 rounded-lg text-xs text-slate-400 border border-slate-700/60 hover:text-slate-300 hover:border-slate-600/60 transition-colors"
+        >
+          取消
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // ===== 主 Dashboard 组件 =====
 
 export default function Dashboard() {
@@ -1378,8 +1836,11 @@ export default function Dashboard() {
     owner: string;
     repo: string;
     prNumber: number;
+    modeId?: number;
   } | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [reviewModes, setReviewModes] = useState<ReviewMode[]>([]);
+  const [modesRefreshKey, setModesRefreshKey] = useState(0);
 
   const [batchStatus, setBatchStatus] = useState<PageStatus>('idle');
   const [batchResult, setBatchResult] = useState<BatchAnalyzeResponse | null>(null);
@@ -1391,14 +1852,36 @@ export default function Dashboard() {
     }
   }, [pageStatus]);
 
-  const handleAnalyze = async (owner: string, repo: string, prNumber: number) => {
+  useEffect(() => {
+    let cancelled = false;
+    const loadModes = async () => {
+      try {
+        const data = await fetchModes();
+        if (!cancelled) {
+          setReviewModes(data);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    loadModes();
+    return () => {
+      cancelled = true;
+    };
+  }, [modesRefreshKey]);
+
+  const handleModesChanged = () => {
+    setModesRefreshKey((prev) => prev + 1);
+  };
+
+  const handleAnalyze = async (owner: string, repo: string, prNumber: number, modeId?: number) => {
     setPageStatus('loading');
     setErrorMessage('');
     setResultData(null);
-    setLastParams({ owner, repo, prNumber });
+    setLastParams({ owner, repo, prNumber, modeId });
 
     try {
-      const response = await analyzePR({ owner, repo, prNumber });
+      const response = await analyzePR({ owner, repo, prNumber, modeId });
 
       if (response.success) {
         setResultData(response.data);
@@ -1421,7 +1904,7 @@ export default function Dashboard() {
 
   const handleRetry = () => {
     if (lastParams) {
-      handleAnalyze(lastParams.owner, lastParams.repo, lastParams.prNumber);
+      handleAnalyze(lastParams.owner, lastParams.repo, lastParams.prNumber, lastParams.modeId);
     }
   };
 
@@ -1503,6 +1986,7 @@ export default function Dashboard() {
         <>
           <InputForm onSubmit={handleAnalyze} isLoading={pageStatus === 'loading'} />
           <HistoryPanel refreshTrigger={historyRefreshKey} />
+          <ReviewModePanel modes={reviewModes} onModesChanged={handleModesChanged} />
 
           {pageStatus === 'loading' && <LoadingState />}
           {pageStatus === 'error' && (

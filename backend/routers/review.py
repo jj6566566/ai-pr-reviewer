@@ -18,12 +18,24 @@ from backend.schemas.review import (
     FileInfo,
     FileOverlapItem,
     PRInfoResponse,
+    ReviewModeCreate,
+    ReviewModeResponse,
+    ReviewModeUpdate,
     SimilarCodeBlockItem,
 )
 from backend.services.duplicate_detector import detect_cross_pr_duplicates
 from backend.services.github import github_service
 from backend.services.reviewer import reviewer_service
-from backend.store import get_analysis_by_id, get_recent_analyses, save_analysis
+from backend.store import (
+    create_review_mode,
+    delete_review_mode,
+    get_analysis_by_id,
+    get_recent_analyses,
+    get_review_mode_by_id,
+    list_review_modes,
+    save_analysis,
+    update_review_mode,
+)
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -32,12 +44,25 @@ logger = logging.getLogger(__name__)
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_pr(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)):
+    system_prompt = None
+    temperature = None
+    if request.mode_id is not None:
+        mode = await get_review_mode_by_id(db, request.mode_id)
+        if mode is None:
+            raise HTTPException(status_code=404, detail="评审模式不存在")
+        system_prompt = mode.system_prompt
+        temperature = mode.temperature
+
     try:
-        response = reviewer_service.analyze(request)
+        response = reviewer_service.analyze(
+            request,
+            system_prompt=system_prompt,
+            temperature=temperature,
+        )
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=400, detail="GitHub API \u9519\u8bef: {}".format(e.response.text))
+        raise HTTPException(status_code=400, detail="GitHub API 错误: {}".format(e.response.text))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="\u5206\u6790\u5931\u8d25: {}".format(str(e)))
+        raise HTTPException(status_code=500, detail="分析失败: {}".format(str(e)))
 
     try:
         await save_analysis(db, response)
@@ -114,8 +139,19 @@ async def batch_analyze(request: BatchAnalyzeRequest, db: AsyncSession = Depends
             repo=item.repo,
             pr_number=item.pr_number,
         )
+        system_prompt = None
+        temperature = None
+        if hasattr(item, "mode_id") and item.mode_id is not None:
+            mode = await get_review_mode_by_id(db, item.mode_id)
+            if mode is not None:
+                system_prompt = mode.system_prompt
+                temperature = mode.temperature
         try:
-            response = reviewer_service.analyze(analyze_req)
+            response = reviewer_service.analyze(
+                analyze_req,
+                system_prompt=system_prompt,
+                temperature=temperature,
+            )
         except httpx.HTTPStatusError as e:
             raise HTTPException(
                 status_code=400,
@@ -293,3 +329,85 @@ async def get_history_detail(
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
     }
+
+
+@router.get("/modes", response_model=list[ReviewModeResponse])
+async def list_modes(db: AsyncSession = Depends(get_db)):
+    modes = await list_review_modes(db)
+    return [
+        ReviewModeResponse(
+            id=m.id,
+            name=m.name,
+            description=m.description,
+            system_prompt=m.system_prompt,
+            is_preset=m.is_preset,
+            temperature=m.temperature,
+            sort_order=m.sort_order,
+            created_at=m.created_at.isoformat() if m.created_at else None,
+            updated_at=m.updated_at.isoformat() if m.updated_at else None,
+        )
+        for m in modes
+    ]
+
+
+@router.get("/modes/{mode_id}", response_model=ReviewModeResponse)
+async def get_mode(mode_id: int, db: AsyncSession = Depends(get_db)):
+    m = await get_review_mode_by_id(db, mode_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="评审模式不存在")
+    return ReviewModeResponse(
+        id=m.id,
+        name=m.name,
+        description=m.description,
+        system_prompt=m.system_prompt,
+        is_preset=m.is_preset,
+        temperature=m.temperature,
+        sort_order=m.sort_order,
+        created_at=m.created_at.isoformat() if m.created_at else None,
+        updated_at=m.updated_at.isoformat() if m.updated_at else None,
+    )
+
+
+@router.post("/modes", response_model=ReviewModeResponse)
+async def create_mode(data: ReviewModeCreate, db: AsyncSession = Depends(get_db)):
+    try:
+        m = await create_review_mode(db, data)
+    except Exception:
+        raise HTTPException(status_code=409, detail="模式名称已存在")
+    return ReviewModeResponse(
+        id=m.id,
+        name=m.name,
+        description=m.description,
+        system_prompt=m.system_prompt,
+        is_preset=m.is_preset,
+        temperature=m.temperature,
+        sort_order=m.sort_order,
+        created_at=m.created_at.isoformat() if m.created_at else None,
+        updated_at=m.updated_at.isoformat() if m.updated_at else None,
+    )
+
+
+@router.put("/modes/{mode_id}", response_model=ReviewModeResponse)
+async def update_mode(mode_id: int, data: ReviewModeUpdate, db: AsyncSession = Depends(get_db)):
+    m = await update_review_mode(db, mode_id, data)
+    if m is None:
+        raise HTTPException(status_code=404, detail="评审模式不存在或为预设模式不可修改")
+    return ReviewModeResponse(
+        id=m.id,
+        name=m.name,
+        description=m.description,
+        system_prompt=m.system_prompt,
+        is_preset=m.is_preset,
+        temperature=m.temperature,
+        sort_order=m.sort_order,
+        created_at=m.created_at.isoformat() if m.created_at else None,
+        updated_at=m.updated_at.isoformat() if m.updated_at else None,
+    )
+
+
+@router.delete("/modes/{mode_id}")
+async def remove_mode(mode_id: int, db: AsyncSession = Depends(get_db)):
+    ok = await delete_review_mode(db, mode_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="评审模式不存在或为预设模式不可删除")
+    return {"ok": True}

@@ -11,6 +11,7 @@ import type {
   HistoryDetail,
   BatchAnalyzeItem,
   BatchAnalyzeResponse,
+  ReviewMode,
 } from '../types/review';
 
 /** API 基础路径（通过 Vite proxy 转发到后端） */
@@ -22,7 +23,7 @@ const API_BASE = '/api';
  * @returns 分析结果（成功则包含后端数据，失败则包含错误信息）
  */
 export async function analyzePR(params: AnalyzeRequest): Promise<AnalyzeResult> {
-  const { owner, repo, prNumber } = params;
+  const { owner, repo, prNumber, modeId } = params;
 
   const response = await fetch(`${API_BASE}/review/analyze`, {
     method: 'POST',
@@ -33,6 +34,7 @@ export async function analyzePR(params: AnalyzeRequest): Promise<AnalyzeResult> 
       owner: owner.trim(),
       repo: repo.trim(),
       pr_number: prNumber,
+      mode_id: modeId ?? null,
     }),
   });
 
@@ -99,5 +101,88 @@ export async function analyzeBatch(prs: BatchAnalyzeItem[]): Promise<BatchAnalyz
     body: JSON.stringify({ prs }),
   });
   if (!response.ok) throw new Error(`批量分析失败 (HTTP ${response.status})`);
+  return response.json();
+}
+
+export async function fetchModes(): Promise<ReviewMode[]> {
+  const response = await fetch(`${API_BASE}/review/modes`);
+  if (!response.ok) {
+    throw new Error(`获取评审模式失败 (HTTP ${response.status})`);
+  }
+  return response.json();
+}
+
+export async function createMode(data: {
+  name: string;
+  description: string;
+  system_prompt: string;
+  temperature?: number;
+}): Promise<ReviewMode> {
+  const response = await fetch(`${API_BASE}/review/modes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    let errorMsg = `创建模式失败 (HTTP ${response.status})`;
+    try {
+      const errorBody = await response.json();
+      if (typeof errorBody?.detail === 'string') {
+        errorMsg = errorBody.detail;
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(errorMsg);
+  }
+  return response.json();
+}
+
+export async function updateMode(
+  id: number,
+  data: Partial<{
+    name: string;
+    description: string;
+    system_prompt: string;
+    temperature: number;
+    sort_order: number;
+  }>,
+): Promise<ReviewMode> {
+  const response = await fetch(`${API_BASE}/review/modes/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    let errorMsg = `更新模式失败 (HTTP ${response.status})`;
+    try {
+      const errorBody = await response.json();
+      if (typeof errorBody?.detail === 'string') {
+        errorMsg = errorBody.detail;
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(errorMsg);
+  }
+  return response.json();
+}
+
+export async function deleteMode(id: number): Promise<{ ok: boolean }> {
+  const response = await fetch(`${API_BASE}/review/modes/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    let errorMsg = `删除模式失败 (HTTP ${response.status})`;
+    try {
+      const errorBody = await response.json();
+      if (typeof errorBody?.detail === 'string') {
+        errorMsg = errorBody.detail;
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(errorMsg);
+  }
   return response.json();
 }

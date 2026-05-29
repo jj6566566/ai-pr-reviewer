@@ -35,21 +35,29 @@ class ReviewerService:
     def __init__(self, client: Optional[LLMClient] = None):
         self.llm = client or llm_client
 
-    def analyze(self, request: AnalyzeRequest) -> AnalyzeResponse:
+    def analyze(
+        self,
+        request: AnalyzeRequest,
+        system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
+    ) -> AnalyzeResponse:
         pr_info = github_service.get_pr_info(
             owner=request.owner,
             repo=request.repo,
             pr_number=request.pr_number,
         )
 
-        # 智能 Diff 预处理
         diff_ctx = diff_processor.process(
             diff_content=pr_info.diff_content,
             files=pr_info.files,
         )
 
-        # LLM 分析（传入结构化上下文）
-        analysis = self._call_llm(pr_info, diff_ctx)
+        analysis = self._call_llm(
+            pr_info,
+            diff_ctx,
+            system_prompt=system_prompt,
+            temperature=temperature,
+        )
 
         # 风险评分计算
         risk_result = risk_scorer.score(
@@ -96,11 +104,17 @@ class ReviewerService:
             estimated_review_minutes=risk_result.estimated_minutes,
         )
 
-    def _call_llm(self, pr_info: PRInfo, diff_ctx: DiffContext) -> dict:
+    def _call_llm(
+        self,
+        pr_info: PRInfo,
+        diff_ctx: DiffContext,
+        system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
+    ) -> dict:
         user_message = self._build_user_message(pr_info, diff_ctx)
-
-        raw = self.llm.chat(system_prompt=SYSTEM_PROMPT, user_message=user_message)
-
+        prompt = system_prompt or SYSTEM_PROMPT
+        temp = temperature if temperature is not None else 0.3
+        raw = self.llm.chat(system_prompt=prompt, user_message=user_message, temperature=temp)
         return self._parse_response(raw)
 
     def _build_user_message(self, pr_info: PRInfo, diff_ctx: DiffContext) -> str:
