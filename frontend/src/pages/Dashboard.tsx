@@ -4,7 +4,7 @@
  * 提供 PR 输入、分析触发、结果展示（摘要/风险/建议）完整交互流程
  */
 
-import { useState, useMemo, type FormEvent } from 'react';
+import { useState, useMemo, useEffect, useCallback, type FormEvent } from 'react';
 import {
   GitPullRequest,
   Loader2,
@@ -15,13 +15,20 @@ import {
   Search,
   GitBranch,
   MapPin,
+  History,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  ArrowLeft,
 } from 'lucide-react';
-import { analyzePR } from '../api/review';
+import { analyzePR, fetchHistory, fetchHistoryDetail } from '../api/review';
 import type {
   AnalyzeResponse,
   RiskItem,
   SuggestionItem,
   SuggestionCategory,
+  HistoryItem,
+  HistoryDetail,
 } from '../types/review';
 import {
   RISK_SEVERITY_CONFIG,
@@ -521,18 +528,265 @@ function ResultSection({ data, onReset }: ResultSectionProps) {
   );
 }
 
+// ===== 历史记录辅助函数 =====
+
+/** 格式化 ISO 日期为中文显示 */
+function formatDate(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** 将 HistoryDetail 转换为 AnalyzeResponse 兼容格式，复用现有展示组件 */
+function buildAnalyzeResponseFromHistory(detail: HistoryDetail): AnalyzeResponse {
+  return {
+    pr_info: {
+      owner: detail.repo_owner,
+      repo: detail.repo_name,
+      number: detail.pr_number,
+      title: detail.pr_title,
+      description: detail.pr_description,
+      author: detail.author,
+      base_branch: detail.base_branch,
+      head_branch: detail.head_branch,
+      files_changed: detail.files_changed,
+      additions: detail.additions,
+      deletions: detail.deletions,
+      files: [],
+      diff_content: '',
+    },
+    summary: detail.summary,
+    risk_items: detail.risk_items,
+    suggestions: detail.suggestions,
+    risk_score: detail.risk_score,
+    risk_level: detail.risk_level,
+    estimated_review_minutes: detail.estimated_review_minutes,
+  };
+}
+
+// ===== 历史记录面板 =====
+
+interface HistoryPanelProps {
+  refreshTrigger: number;
+}
+
+function HistoryPanel({ refreshTrigger }: HistoryPanelProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [historyMode, setHistoryMode] = useState<'list' | 'detail'>('list');
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [detailData, setDetailData] = useState<HistoryDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const items = await fetchHistory(20);
+      setHistoryItems(items);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '加载历史记录失败';
+      setHistoryError(message);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory, refreshTrigger]);
+
+  const handleToggleExpand = () => {
+    const nextExpanded = !isExpanded;
+    setIsExpanded(nextExpanded);
+    if (nextExpanded && historyItems.length === 0 && !historyLoading) {
+      loadHistory();
+    }
+  };
+
+  const handleItemClick = async (item: HistoryItem) => {
+    setHistoryMode('detail');
+    setDetailLoading(true);
+    setDetailError('');
+    try {
+      const detail = await fetchHistoryDetail(item.id);
+      setDetailData(detail);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '加载详情失败';
+      setDetailError(message);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleBackToList = () => {
+    setHistoryMode('list');
+    setDetailData(null);
+    setDetailError('');
+  };
+
+  if (historyMode === 'detail') {
+    return (
+      <div className="max-w-3xl mx-auto mb-10">
+        <button
+          onClick={handleBackToList}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 border border-slate-600/50 text-slate-300 text-sm hover:bg-slate-700 transition-colors mb-4"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          返回历史记录
+        </button>
+
+        {detailLoading && <LoadingState />}
+
+        {detailError && (
+          <div className="rounded-xl border border-red-500/20 bg-red-950/20 p-6 text-center">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6 text-red-400" />
+            </div>
+            <h3 className="text-red-400 font-semibold mb-2">加载失败</h3>
+            <p className="text-slate-400 text-sm">{detailError}</p>
+          </div>
+        )}
+
+        {detailData && (
+          <>
+            <SummaryCard data={buildAnalyzeResponseFromHistory(detailData)} />
+            <RiskList riskItems={detailData.risk_items} />
+            <SuggestionList suggestions={detailData.suggestions} />
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto mb-10">
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm">
+        <button
+          onClick={handleToggleExpand}
+          className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-800/20 transition-colors rounded-xl"
+        >
+          <div className="flex items-center gap-2.5">
+            <History className="w-5 h-5 text-sky-400" />
+            <h2 className="text-lg font-semibold text-slate-200">历史记录</h2>
+            {historyItems.length > 0 && (
+              <span className="text-xs text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded-full">
+                {historyItems.length}
+              </span>
+            )}
+          </div>
+          {isExpanded ? (
+            <ChevronUp className="w-5 h-5 text-slate-400" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-slate-400" />
+          )}
+        </button>
+
+        {isExpanded && (
+          <div className="px-5 pb-5 border-t border-slate-700/50">
+            {historyLoading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 text-sky-400 animate-spin" />
+                <span className="ml-2 text-sm text-slate-400">加载中...</span>
+              </div>
+            )}
+
+            {historyError && (
+              <div className="py-6 text-center">
+                <p className="text-sm text-red-400">{historyError}</p>
+                <button
+                  onClick={loadHistory}
+                  className="mt-2 inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-slate-700/50 border border-slate-600/50 text-slate-300 text-xs hover:bg-slate-700 transition-colors"
+                >
+                  <Search className="w-3 h-3" />
+                  重试
+                </button>
+              </div>
+            )}
+
+            {!historyLoading && !historyError && historyItems.length === 0 && (
+              <div className="py-8 text-center">
+                <Clock className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+                <p className="text-sm text-slate-500">暂无历史记录</p>
+              </div>
+            )}
+
+            {!historyLoading && historyItems.length > 0 && (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1 pt-3">
+                {historyItems.map((item) => {
+                  const scoreConfig = RISK_LEVEL_SCORE_CONFIG[item.risk_level];
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleItemClick(item)}
+                      className="w-full text-left rounded-lg bg-slate-800/50 border border-slate-700/40 p-4 hover:border-sky-500/40 hover:bg-slate-800/70 transition-all duration-200 group"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-slate-200 truncate group-hover:text-sky-300 transition-colors">
+                            {item.pr_title}
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                            <span>
+                              {item.repo_owner}/{item.repo_name}#{item.pr_number}
+                            </span>
+                            <span className="text-slate-600">|</span>
+                            <span>{item.author}</span>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="text-xs text-slate-500 flex items-center gap-1">
+                            <FileCode2 className="w-3 h-3" />
+                            {item.files_changed}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${scoreConfig.textClass} ${scoreConfig.bgClass}`}
+                          >
+                            {item.risk_score}
+                          </span>
+                          <span className="text-[11px] text-slate-500 whitespace-nowrap">
+                            {formatDate(item.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ===== 主 Dashboard 组件 =====
 
 export default function Dashboard() {
   const [pageStatus, setPageStatus] = useState<PageStatus>('idle');
   const [resultData, setResultData] = useState<AnalyzeResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
-  // 缓存最近一次请求参数用于重试
   const [lastParams, setLastParams] = useState<{
     owner: string;
     repo: string;
     prNumber: number;
   } | null>(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (pageStatus === 'success') {
+      setHistoryRefreshKey((prev) => prev + 1);
+    }
+  }, [pageStatus]);
 
   /** 发起分析 */
   const handleAnalyze = async (owner: string, repo: string, prNumber: number) => {
@@ -582,6 +836,8 @@ export default function Dashboard() {
     <div className="min-h-screen px-4 pb-16">
       <BrandHeader />
       <InputForm onSubmit={handleAnalyze} isLoading={pageStatus === 'loading'} />
+
+      <HistoryPanel refreshTrigger={historyRefreshKey} />
 
       {pageStatus === 'loading' && <LoadingState />}
       {pageStatus === 'error' && (

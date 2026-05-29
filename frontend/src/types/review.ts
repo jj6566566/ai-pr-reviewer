@@ -139,6 +139,36 @@ export interface AnalyzeErrorResponse {
 /** 分析结果联合类型 */
 export type AnalyzeResult = AnalyzeSuccessResponse | AnalyzeErrorResponse;
 
+// ===== 历史记录类型 =====
+
+/** 历史记录列表项 */
+export interface HistoryItem {
+  id: number;
+  repo_owner: string;
+  repo_name: string;
+  pr_number: number;
+  pr_title: string;
+  author: string;
+  risk_score: number;
+  risk_level: RiskLevel;
+  files_changed: number;
+  status: string;
+  created_at: string;
+}
+
+/** 历史记录详情（含完整分析结果） */
+export interface HistoryDetail extends HistoryItem {
+  summary: string;
+  risk_items: RiskItem[];
+  suggestions: SuggestionItem[];
+  pr_description: string;
+  base_branch: string;
+  head_branch: string;
+  additions: number;
+  deletions: number;
+  estimated_review_minutes: number;
+}
+
 // ===== 展示配置 =====
 
 /** 风险级别的展示配置 */
