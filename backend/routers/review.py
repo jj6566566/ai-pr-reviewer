@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 
 from backend.schemas.review import AnalyzeRequest, AnalyzeResponse, FileInfo, PRInfoResponse
 from backend.services.github import github_service
+from backend.services.reviewer import reviewer_service
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -10,10 +11,20 @@ router = APIRouter(prefix="/api/review", tags=["review"])
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_pr(request: AnalyzeRequest):
     try:
+        return reviewer_service.analyze(request)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=400, detail=f"GitHub API 错误: {e.response.text}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+
+
+@router.get("/fetch")
+async def fetch_pr(owner: str, repo: str, pr_number: int):
+    try:
         pr_info = github_service.get_pr_info(
-            owner=request.owner,
-            repo=request.repo,
-            pr_number=request.pr_number,
+            owner=owner,
+            repo=repo,
+            pr_number=pr_number,
         )
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=400, detail=f"GitHub API 错误: {e.response.text}")
