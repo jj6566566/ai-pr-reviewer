@@ -1,11 +1,15 @@
 import json
-from typing import Optional
+from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.pr_analysis import PRAnalysis
-from backend.schemas.review import AnalyzeResponse
+from backend.models.pr_analysis import CustomRule, PRAnalysis
+from backend.schemas.review import (
+    AnalyzeResponse,
+    CustomRuleCreate,
+    CustomRuleUpdate,
+)
 
 
 async def save_analysis(db: AsyncSession, response: AnalyzeResponse) -> PRAnalysis:
@@ -60,3 +64,70 @@ async def get_analysis_by_id(db: AsyncSession, analysis_id: int) -> Optional[PRA
     stmt = select(PRAnalysis).where(PRAnalysis.id == analysis_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def list_rules(db: AsyncSession) -> List[CustomRule]:
+    stmt = select(CustomRule).order_by(CustomRule.id.asc())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_enabled_rules(db: AsyncSession) -> List[CustomRule]:
+    stmt = select(CustomRule).where(CustomRule.is_enabled == True).order_by(CustomRule.id.asc())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_rule_by_id(db: AsyncSession, rule_id: int) -> Optional[CustomRule]:
+    stmt = select(CustomRule).where(CustomRule.id == rule_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def create_rule(db: AsyncSession, data: CustomRuleCreate) -> CustomRule:
+    rule = CustomRule(
+        name=data.name,
+        description=data.description,
+        match_type=data.match_type,
+        match_pattern=data.match_pattern,
+        match_scope=data.match_scope,
+        file_filter=data.file_filter,
+        severity=data.severity,
+        suggestion=data.suggestion,
+        is_enabled=data.is_enabled,
+        is_preset=False,
+    )
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    return rule
+
+
+async def update_rule(db: AsyncSession, rule_id: int, data: CustomRuleUpdate) -> Optional[CustomRule]:
+    rule = await get_rule_by_id(db, rule_id)
+    if rule is None:
+        return None
+    update_data = {}
+    if rule.is_preset:
+        allowed = {"is_enabled"}
+    else:
+        allowed = {"name", "description", "match_type", "match_pattern", "match_scope", "file_filter", "severity", "suggestion", "is_enabled"}
+    for field in allowed:
+        val = getattr(data, field, None)
+        if val is not None:
+            update_data[field] = val
+    if update_data:
+        stmt = update(CustomRule).where(CustomRule.id == rule_id).values(**update_data)
+        await db.execute(stmt)
+        await db.commit()
+        await db.refresh(rule)
+    return rule
+
+
+async def delete_rule(db: AsyncSession, rule_id: int) -> bool:
+    rule = await get_rule_by_id(db, rule_id)
+    if rule is None or rule.is_preset:
+        return False
+    await db.delete(rule)
+    await db.commit()
+    return True

@@ -14,16 +14,31 @@ from backend.schemas.review import (
     BatchOverview,
     BatchRiskCard,
     CrossPRDuplicateResult,
+    CustomRuleCreate,
+    CustomRuleResponse,
+    CustomRuleUpdate,
     DuplicateRiskPatternItem,
     FileInfo,
     FileOverlapItem,
     PRInfoResponse,
+    RuleMatch,
     SimilarCodeBlockItem,
 )
 from backend.services.duplicate_detector import detect_cross_pr_duplicates
 from backend.services.github import github_service
 from backend.services.reviewer import reviewer_service
-from backend.store import get_analysis_by_id, get_recent_analyses, save_analysis
+from backend.services.rule_engine import DiffFile, run_rules
+from backend.store import (
+    create_rule,
+    delete_rule,
+    get_analysis_by_id,
+    get_enabled_rules,
+    get_recent_analyses,
+    get_rule_by_id,
+    list_rules,
+    save_analysis,
+    update_rule,
+)
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -38,6 +53,29 @@ async def analyze_pr(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=400, detail="GitHub API \u9519\u8bef: {}".format(e.response.text))
     except Exception as e:
         raise HTTPException(status_code=500, detail="\u5206\u6790\u5931\u8d25: {}".format(str(e)))
+
+    try:
+        rules = await get_enabled_rules(db)
+        if rules:
+            diff_files = [
+                DiffFile(filename=f.filename, patch=f.patch)
+                for f in response.pr_info.files
+            ]
+            matches = run_rules(rules, diff_files)
+            response.rule_matches = [
+                RuleMatch(
+                    rule_id=m.rule_id,
+                    rule_name=m.rule_name,
+                    severity=m.severity,
+                    file=m.file,
+                    line=m.line,
+                    matched_text=m.matched_text,
+                    suggestion=m.suggestion,
+                )
+                for m in matches
+            ]
+    except Exception as e:
+        logger.error("\u89c4\u5219\u5f15\u64ce\u6267\u884c\u5931\u8d25: %s", e)
 
     try:
         await save_analysis(db, response)
@@ -293,3 +331,79 @@ async def get_history_detail(
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
     }
+
+
+@router.get("/rules", response_model=list[CustomRuleResponse])
+async def get_rules(db: AsyncSession = Depends(get_db)):
+    rules = await list_rules(db)
+    return [
+        CustomRuleResponse(
+            id=r.id,
+            name=r.name,
+            description=r.description,
+            match_type=r.match_type,
+            match_pattern=r.match_pattern,
+            match_scope=r.match_scope,
+            file_filter=r.file_filter,
+            severity=r.severity,
+            suggestion=r.suggestion,
+            is_enabled=r.is_enabled,
+            is_preset=r.is_preset,
+            created_at=r.created_at.isoformat() if r.created_at else None,
+            updated_at=r.updated_at.isoformat() if r.updated_at else None,
+        )
+        for r in rules
+    ]
+
+
+@router.post("/rules", response_model=CustomRuleResponse)
+async def add_rule(data: CustomRuleCreate, db: AsyncSession = Depends(get_db)):
+    try:
+        r = await create_rule(db, data)
+    except Exception:
+        raise HTTPException(status_code=409, detail="规则名称已存在")
+    return CustomRuleResponse(
+        id=r.id,
+        name=r.name,
+        description=r.description,
+        match_type=r.match_type,
+        match_pattern=r.match_pattern,
+        match_scope=r.match_scope,
+        file_filter=r.file_filter,
+        severity=r.severity,
+        suggestion=r.suggestion,
+        is_enabled=r.is_enabled,
+        is_preset=r.is_preset,
+        created_at=r.created_at.isoformat() if r.created_at else None,
+        updated_at=r.updated_at.isoformat() if r.updated_at else None,
+    )
+
+
+@router.put("/rules/{rule_id}", response_model=CustomRuleResponse)
+async def edit_rule(rule_id: int, data: CustomRuleUpdate, db: AsyncSession = Depends(get_db)):
+    r = await update_rule(db, rule_id, data)
+    if r is None:
+        raise HTTPException(status_code=404, detail="规则不存在或为预设规则不可修改")
+    return CustomRuleResponse(
+        id=r.id,
+        name=r.name,
+        description=r.description,
+        match_type=r.match_type,
+        match_pattern=r.match_pattern,
+        match_scope=r.match_scope,
+        file_filter=r.file_filter,
+        severity=r.severity,
+        suggestion=r.suggestion,
+        is_enabled=r.is_enabled,
+        is_preset=r.is_preset,
+        created_at=r.created_at.isoformat() if r.created_at else None,
+        updated_at=r.updated_at.isoformat() if r.updated_at else None,
+    )
+
+
+@router.delete("/rules/{rule_id}")
+async def remove_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
+    ok = await delete_rule(db, rule_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="规则不存在或为预设规则不可删除")
+    return {"ok": True}
