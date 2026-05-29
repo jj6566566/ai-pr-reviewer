@@ -59,6 +59,18 @@ class AnalyzeResponse(BaseModel):
     """风险等级：low / medium / high / critical。"""
     estimated_review_minutes: int = 0
     """估算审查时间（分钟）。"""
+    context_coverage: Optional[float] = None
+    rule_matches: list["RuleMatch"] = []
+
+
+class RuleMatch(BaseModel):
+    rule_id: int
+    rule_name: str
+    severity: str
+    file: str
+    line: int
+    matched_text: str
+    suggestion: Optional[str] = None
 
 
 class BatchAnalyzeItem(BaseModel):
@@ -118,3 +130,43 @@ class BatchAnalyzeResponse(BaseModel):
     results: list[AnalyzeResponse]
     overview: BatchOverview
     duplicate_analysis: Optional[CrossPRDuplicateResult] = None
+
+
+class CustomRuleCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    match_type: str = Field(..., pattern="^(text|regex|glob)$")
+    match_pattern: str = Field(..., min_length=1)
+    match_scope: str = Field("added_lines", pattern="^(added_lines|context_lines|full_file)$")
+    file_filter: Optional[str] = Field(None)
+    severity: str = Field("medium", pattern="^(critical|high|medium|low)$")
+    suggestion: Optional[str] = Field(None, max_length=500)
+    is_enabled: bool = True
+
+
+class CustomRuleUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    match_type: Optional[str] = Field(None, pattern="^(text|regex|glob)$")
+    match_pattern: Optional[str] = Field(None, min_length=1)
+    match_scope: Optional[str] = Field(None, pattern="^(added_lines|context_lines|full_file)$")
+    file_filter: Optional[str] = Field(None)
+    severity: Optional[str] = Field(None, pattern="^(critical|high|medium|low)$")
+    suggestion: Optional[str] = Field(None, max_length=500)
+    is_enabled: Optional[bool] = None
+
+
+class CustomRuleResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    match_type: str
+    match_pattern: str
+    match_scope: str
+    file_filter: Optional[str] = None
+    severity: str
+    suggestion: Optional[str] = None
+    is_enabled: bool
+    is_preset: bool
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None

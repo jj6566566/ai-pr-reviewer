@@ -102,6 +102,17 @@ export interface SuggestionItem {
 /** 风险等级 */
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
+/** 自定义规则匹配结果 */
+export interface RuleMatch {
+  rule_id: number;
+  rule_name: string;
+  severity: string;
+  file: string;
+  line: number;
+  matched_text: string;
+  suggestion: string | null;
+}
+
 /** 后端完整分析响应 */
 export interface AnalyzeResponse {
   /** PR 基本信息 */
@@ -112,6 +123,8 @@ export interface AnalyzeResponse {
   risk_items: RiskItem[];
   /** 改进建议列表 */
   suggestions: SuggestionItem[];
+  /** 自定义规则命中列表 */
+  rule_matches: RuleMatch[];
   /** 综合风险分（0-100） */
   risk_score: number;
   /** 风险等级 */
@@ -327,3 +340,19 @@ export const RISK_LEVEL_SCORE_CONFIG: Record<
     ringClass: 'ring-red-500/30',
   },
 };
+
+export interface CustomRule {
+  id: number;
+  name: string;
+  description: string | null;
+  match_type: 'text' | 'regex' | 'glob';
+  match_pattern: string;
+  match_scope: 'added_lines' | 'context_lines' | 'full_file';
+  file_filter: string | null;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  suggestion: string | null;
+  is_enabled: boolean;
+  is_preset: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}

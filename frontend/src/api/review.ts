@@ -11,6 +11,7 @@ import type {
   HistoryDetail,
   BatchAnalyzeItem,
   BatchAnalyzeResponse,
+  CustomRule,
 } from '../types/review';
 
 /** API 基础路径（通过 Vite proxy 转发到后端） */
@@ -99,5 +100,50 @@ export async function analyzeBatch(prs: BatchAnalyzeItem[]): Promise<BatchAnalyz
     body: JSON.stringify({ prs }),
   });
   if (!response.ok) throw new Error(`批量分析失败 (HTTP ${response.status})`);
+  return response.json();
+}
+
+export async function fetchRules(): Promise<CustomRule[]> {
+  const response = await fetch(`${API_BASE}/review/rules`);
+  if (!response.ok) throw new Error(`获取规则列表失败 (HTTP ${response.status})`);
+  return response.json();
+}
+
+export async function createRule(
+  data: Omit<CustomRule, 'id' | 'created_at' | 'updated_at'>,
+): Promise<CustomRule> {
+  const response = await fetch(`${API_BASE}/review/rules`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || `创建规则失败 (HTTP ${response.status})`);
+  }
+  return response.json();
+}
+
+export async function updateRule(
+  id: number,
+  data: Partial<Omit<CustomRule, 'id' | 'created_at' | 'updated_at'>>,
+): Promise<CustomRule> {
+  const response = await fetch(`${API_BASE}/review/rules/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || `更新规则失败 (HTTP ${response.status})`);
+  }
+  return response.json();
+}
+
+export async function deleteRule(id: number): Promise<{ ok: boolean }> {
+  const response = await fetch(`${API_BASE}/review/rules/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error(`删除规则失败 (HTTP ${response.status})`);
   return response.json();
 }
