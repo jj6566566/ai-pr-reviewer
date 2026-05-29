@@ -5,16 +5,13 @@
 
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
+import Settings from './pages/Settings';
 
-/**
- * App 路由配置：
- * - /          -> Dashboard 主页
- * - 未匹配路由  -> 重定向到 /
- */
 function App() {
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
+      <Route path="/settings" element={<Settings />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
