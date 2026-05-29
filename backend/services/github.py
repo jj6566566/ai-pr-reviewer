@@ -1,4 +1,6 @@
+import base64
 from dataclasses import dataclass, field
+from typing import List
 
 import certifi
 import httpx
@@ -6,6 +8,17 @@ import httpx
 from backend.config import settings
 
 GITHUB_API = "https://api.github.com"
+
+# 二进制文件扩展名（不获取内容的文件类型）
+BINARY_EXTENSIONS: List[str] = [
+    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".bmp", ".webp",
+    ".woff", ".woff2", ".ttf", ".eot", ".otf",
+    ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
+    ".mp3", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm",
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".exe", ".dll", ".so", ".dylib", ".bin",
+    ".pyc", ".pyo", ".class", ".o", ".a",
+]
 
 
 @dataclass
@@ -102,6 +115,66 @@ class GitHubService:
             parts.append(f.patch)
             parts.append("")
         return "\n".join(parts)
+
+    def get_file_contents(self, owner: str, repo: str, path: str, ref: str) -> str:
+        """获取指定文件在指定分支的完整内容。
+
+        调用 GitHub Contents API，base64 解码后返回源代码文本。
+        自动跳过二进制文件；超过 5000 行的文件只返回前 200 行并附截断提示。
+
+        Parameters
+        ----------
+        owner : str
+            仓库所有者。
+        repo : str
+            仓库名称。
+        path : str
+            文件在仓库中的相对路径。
+        ref : str
+            分支名或 commit SHA。
+
+        Returns
+        -------
+        str
+            解码后的文件内容；失败或跳过时返回空字符串。
+        """
+        if self._is_binary_filename(path):
+            return ""
+
+        try:
+            resp = self.client.get(
+                "/repos/{}/{}/contents/{}".format(owner, repo, path),
+                params={"ref": ref},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            # GitHub 可能返回数组（目录）或单个对象（文件）
+            if isinstance(data, list):
+                return ""
+
+            content_b64 = data.get("content", "")
+            if not content_b64:
+                return ""
+
+            decoded = base64.b64decode(content_b64).decode("utf-8", errors="replace")
+
+            lines = decoded.split("\n")
+            if len(lines) > 5000:
+                decoded = (
+                    "\n".join(lines[:200])
+                    + "\n... 文件过长已截断（总计 {} 行，仅展示前 200 行）".format(len(lines))
+                )
+
+            return decoded
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _is_binary_filename(path: str) -> bool:
+        """根据文件扩展名判断是否为二进制文件。"""
+        lowered = path.lower()
+        return any(lowered.endswith(ext) for ext in BINARY_EXTENSIONS)
 
     def close(self):
         if self._client:
