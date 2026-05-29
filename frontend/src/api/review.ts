@@ -147,3 +147,9 @@ export async function deleteRule(id: number): Promise<{ ok: boolean }> {
   if (!response.ok) throw new Error(`删除规则失败 (HTTP ${response.status})`);
   return response.json();
 }
+
+export async function fetchTrends(days: number = 30): Promise<import('../types/review').TrendResponse> {
+  const response = await fetch(`${API_BASE}/review/trends?days=${days}`);
+  if (!response.ok) throw new Error(`获取趋势数据失败 (HTTP ${response.status})`);
+  return response.json();
+}

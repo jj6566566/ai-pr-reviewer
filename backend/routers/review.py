@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -23,6 +24,9 @@ from backend.schemas.review import (
     PRInfoResponse,
     RuleMatch,
     SimilarCodeBlockItem,
+    TrendDataPoint,
+    TrendResponse,
+    TrendSummary,
 )
 from backend.services.duplicate_detector import detect_cross_pr_duplicates
 from backend.services.github import github_service
@@ -35,6 +39,7 @@ from backend.store import (
     get_enabled_rules,
     get_recent_analyses,
     get_rule_by_id,
+    get_trends,
     list_rules,
     save_analysis,
     update_rule,
@@ -407,3 +412,64 @@ async def remove_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
     if not ok:
         raise HTTPException(status_code=404, detail="规则不存在或为预设规则不可删除")
     return {"ok": True}
+
+
+@router.get("/trends", response_model=TrendResponse)
+async def get_trend(
+    days: int = Query(default=30, ge=1, le=365),
+    repo_owner: Optional[str] = Query(None),
+    repo_name: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = await get_trends(db, days=days, repo_owner=repo_owner, repo_name=repo_name)
+
+    data_points = [
+        TrendDataPoint(
+            day=row["day"],
+            pr_count=row["pr_count"],
+            avg_risk_score=row["avg_risk_score"],
+            total_files_changed=row["total_files_changed"],
+            total_additions=row["total_additions"],
+            total_deletions=row["total_deletions"],
+            critical_count=row["critical_count"],
+            high_count=row["high_count"],
+            medium_count=row["medium_count"],
+            low_count=row["low_count"],
+        )
+        for row in rows
+    ]
+
+    total_prs = sum(dp.pr_count for dp in data_points)
+    avg_score = (
+        sum(dp.avg_risk_score * dp.pr_count for dp in data_points) / total_prs
+        if total_prs > 0
+        else 0.0
+    )
+
+    trend_direction = "stable"
+    if len(data_points) >= 2:
+        first_half = data_points[: len(data_points) // 2]
+        second_half = data_points[len(data_points) // 2 :]
+        first_avg = sum(d.avg_risk_score for d in first_half) / len(first_half)
+        second_avg = sum(d.avg_risk_score for d in second_half) / len(second_half)
+        if second_avg > first_avg * 1.1:
+            trend_direction = "worsening"
+        elif second_avg < first_avg * 0.9:
+            trend_direction = "improving"
+
+    severity_totals = {
+        "critical": sum(dp.critical_count for dp in data_points),
+        "high": sum(dp.high_count for dp in data_points),
+        "medium": sum(dp.medium_count for dp in data_points),
+        "low": sum(dp.low_count for dp in data_points),
+    }
+    most_common_severity = max(severity_totals, key=severity_totals.get)
+
+    summary = TrendSummary(
+        total_prs=total_prs,
+        avg_risk_score=round(avg_score, 1),
+        trend_direction=trend_direction,
+        most_common_severity=most_common_severity,
+    )
+
+    return TrendResponse(data_points=data_points, summary=summary)

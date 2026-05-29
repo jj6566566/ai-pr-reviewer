@@ -31,6 +31,7 @@ import {
   GitMerge,
   Pencil,
   Trash2,
+  TrendingUp,
 } from 'lucide-react';
 import {
   analyzePR,
@@ -41,6 +42,7 @@ import {
   createRule,
   updateRule,
   deleteRule,
+  fetchTrends,
 } from '../api/review';
 import type {
   AnalyzeResponse,
@@ -56,6 +58,9 @@ import type {
   RiskSeverity,
   CustomRule,
   RuleMatch,
+  TrendResponse,
+  TrendDataPoint,
+  TrendSummary,
 } from '../types/review';
 import {
   RISK_SEVERITY_CONFIG,
@@ -68,7 +73,7 @@ import {
 
 type PageStatus = 'idle' | 'loading' | 'success' | 'error';
 
-type DashboardMode = 'single' | 'batch' | 'rules';
+type DashboardMode = 'single' | 'batch' | 'rules' | 'trends';
 
 // ===== 子组件 =====
 
@@ -2151,6 +2156,17 @@ export default function Dashboard() {
             <ShieldCheck className="w-4 h-4" />
             自定义规则
           </button>
+          <button
+            onClick={() => handleModeChange('trends')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+              mode === 'trends'
+                ? 'bg-slate-700 text-slate-200 shadow-sm'
+                : 'text-slate-400 hover:text-slate-300'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            趋势分析
+          </button>
         </div>
       </div>
 
@@ -2187,6 +2203,190 @@ export default function Dashboard() {
       )}
 
       {mode === 'rules' && <CustomRulesPanel />}
+
+      {mode === 'trends' && <TrendPanel />}
+    </div>
+  );
+}
+
+function TrendPanel() {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState<TrendResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await fetchTrends(days);
+        if (!cancelled) setData(res);
+      } catch (err: unknown) {
+        if (!cancelled) setError(err instanceof Error ? err.message : '加载失败');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [days]);
+
+  const DAY_OPTIONS = [7, 14, 30];
+
+  const formatDay = (dayStr: string | null) => {
+    if (!dayStr) return '';
+    return dayStr.slice(5);
+  };
+
+  const trendConfig: Record<string, { icon: string; text: string; color: string }> = {
+    improving: { icon: '↓', text: '改善中', color: 'text-emerald-400' },
+    worsening: { icon: '↑', text: '恶化中', color: 'text-red-400' },
+    stable: { icon: '→', text: '稳定', color: 'text-slate-400' },
+  };
+
+  const severityColors: Record<string, string> = {
+    critical: 'bg-red-500/70',
+    high: 'bg-orange-500/70',
+    medium: 'bg-yellow-500/70',
+    low: 'bg-emerald-500/70',
+  };
+
+  return (
+    <div className="w-full max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-violet-400" />
+          趋势分析
+        </h2>
+        <div className="inline-flex rounded-lg bg-slate-800/60 border border-slate-700/50 p-1">
+          {DAY_OPTIONS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDays(d)}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                days === d
+                  ? 'bg-slate-700 text-slate-200'
+                  : 'text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              {d}天
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-5 animate-pulse">
+                <div className="h-3 bg-slate-700/50 rounded w-16 mb-3" />
+                <div className="h-6 bg-slate-700/50 rounded w-12" />
+              </div>
+            ))}
+          </div>
+          <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6 animate-pulse">
+            <div className="h-40 bg-slate-700/30 rounded" />
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-6 text-center">
+          <p className="text-red-400 text-sm">{error}</p>
+        </div>
+      )}
+
+      {!loading && !error && data && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-5">
+              <p className="text-xs text-slate-500 mb-1">总分析 PR 数</p>
+              <p className="text-2xl font-bold text-slate-200">{data.summary.total_prs}</p>
+              <p className="text-xs text-slate-600 mt-1">过去{days}天</p>
+            </div>
+            <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-5">
+              <p className="text-xs text-slate-500 mb-1">平均风险评分</p>
+              <p className="text-2xl font-bold text-slate-200">{data.summary.avg_risk_score}</p>
+              <p className="text-xs text-slate-600 mt-1">满分 100</p>
+            </div>
+            <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-5">
+              <p className="text-xs text-slate-500 mb-1">趋势方向</p>
+              <p className={`text-2xl font-bold ${trendConfig[data.summary.trend_direction]?.color ?? 'text-slate-400'}`}>
+                {trendConfig[data.summary.trend_direction]?.icon ?? ''}{' '}
+                {trendConfig[data.summary.trend_direction]?.text ?? data.summary.trend_direction}
+              </p>
+              <p className="text-xs text-slate-600 mt-1">
+                最常见: {data.summary.most_common_severity}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
+            <h3 className="text-sm font-semibold text-slate-300 mb-4">风险等级分布趋势</h3>
+
+            {data.data_points.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-8">暂无足够数据生成趋势</p>
+            ) : (
+              <>
+                <div className="flex justify-center items-stretch gap-2 h-48 mb-3">
+                  {data.data_points.map((dp, idx) => {
+                    const total = dp.low_count + dp.medium_count + dp.high_count + dp.critical_count || 1;
+                    return (
+                      <div
+                        key={idx}
+                        className="w-10 flex-shrink-0 flex flex-col-reverse"
+                        title={`${formatDay(dp.day)}: ${dp.pr_count} PRs`}
+                      >
+                        <div
+                          className="w-full bg-emerald-500/70 rounded-t-sm"
+                          style={{ height: `${Math.max((dp.low_count / total) * 100, 4)}%` }}
+                        />
+                        <div
+                          className="w-full bg-yellow-500/70"
+                          style={{ height: `${Math.max((dp.medium_count / total) * 100, 4)}%` }}
+                        />
+                        <div
+                          className="w-full bg-orange-500/70"
+                          style={{ height: `${Math.max((dp.high_count / total) * 100, 4)}%` }}
+                        />
+                        <div
+                          className="w-full bg-red-500/70 rounded-b-sm"
+                          style={{ height: `${Math.max((dp.critical_count / total) * 100, 4)}%` }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-center gap-2">
+                  {data.data_points.map((dp, idx) => (
+                    <div key={idx} className="w-10 flex-shrink-0 text-center">
+                      <span className="text-[9px] text-slate-600">
+                        {formatDay(dp.day)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-slate-700/50">
+                  {(['low', 'medium', 'high', 'critical'] as const).map((sev) => (
+                    <div key={sev} className="flex items-center gap-1.5">
+                      <span className={`w-3 h-3 rounded-sm ${severityColors[sev]}`} />
+                      <span className="text-[11px] text-slate-400">
+                        {RISK_SEVERITY_CONFIG[sev]?.label ?? sev}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
