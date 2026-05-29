@@ -35,18 +35,18 @@ IGNORE_PATTERNS: List[re.Pattern] = [
 PRIORITY_ORDER: Dict[str, int] = {
     "migrations": 100,
     "config": 90,
-    "auth": 80,
-    "security": 80,
-    "permission": 78,
-    "api": 70,
-    "handler": 68,
-    "controller": 68,
-    "middleware": 65,
+    "auth": 85,
+    "security": 85,
+    "permission": 82,
+    "api": 80,
+    "handler": 75,
+    "controller": 75,
+    "service": 70,
+    "middleware": 68,
+    "repository": 65,
     "schema": 62,
     "model": 60,
-    "service": 55,
-    "repository": 53,
-    "utils": 30,
+    "utils": 40,
     "test": 10,
     "doc": 5,
 }
@@ -76,8 +76,8 @@ AUTH_PATTERNS: List[re.Pattern] = [
     re.compile(r"(auth|login|logout|register|permission|rbac|role|token|jwt|session)", re.IGNORECASE),
 ]
 
-# 核心 diff 最大字符数（高优文件完整保留，低优截断到此长度）
-MAX_DIFF_CHARS = 12000
+# 核心 diff 最大字符数（充分利用 DeepSeek 64K 上下文）
+MAX_DIFF_CHARS = 30000
 
 
 @dataclass
@@ -89,6 +89,9 @@ class DiffContext:
 
     priority_files: List[dict] = field(default_factory=list)
     """高优文件列表，每个元素包含 filename / status / additions / deletions / patch。"""
+
+    low_priority_files: List[dict] = field(default_factory=list)
+    """低优文件列表（截断版 patch），LLM 仍能看到关键内容。"""
 
     filtered_files: List[dict] = field(default_factory=list)
     """被跳过的文件列表，每个元素包含 filename / reason。"""
@@ -143,6 +146,7 @@ class DiffProcessor:
         return DiffContext(
             summary_text=summary_text,
             priority_files=priority_files,
+            low_priority_files=low_priority_summary,
             filtered_files=filtered,
             change_types=change_types,
         )
@@ -192,7 +196,7 @@ class DiffProcessor:
         return ""
 
     def _sort_by_priority(self, files: List[dict]) -> List[dict]:
-        """按目录优先级从高到低排序，同优先级按文件名字母序。"""
+        """按目录优先级 + 变更量加权从高到低排序，同优先级按文件名字母序。"""
 
         def _score(f: dict) -> Tuple[int, str]:
             fname = f.get("filename", "").lower()
@@ -201,8 +205,12 @@ class DiffProcessor:
                 if keyword in fname:
                     priority = weight
                     break
+            # 变更量加分：每 30 行 +1 分，上限 +20
+            change_lines = f.get("additions", 0) + f.get("deletions", 0)
+            change_bonus = min(20, change_lines // 30)
+            final_priority = priority + change_bonus
             # 数值取负，配合 Python 默认升序实现从高到低排序
-            return (-priority, fname)
+            return (-final_priority, fname)
 
         return sorted(files, key=_score)
 
@@ -213,17 +221,16 @@ class DiffProcessor:
 
         算法：
         1. 按优先级遍历，高优先级文件保留完整 diff
-        2. 累计字符数超过 30% 上限后的文件视为低优
-        3. 低优文件只保留文件名、行数统计，不传 patch 给 LLM
+        2. 累计字符数超过 50% 上限后的文件视为低优
+        3. 低优文件保留前 2000 字符 patch + 截断提示，LLM 仍能看到关键内容
         """
         priority: List[dict] = []
         low_priority: List[dict] = []
 
         accumulated = 0
-        cutoff = int(MAX_DIFF_CHARS * 0.30)
+        cutoff = int(MAX_DIFF_CHARS * 0.50)
 
         for f in files:
-            # 高优文件始终保留完整 patch
             fname = f.get("filename", "")
             is_high_priority = any(k in fname.lower() for k in PRIORITY_ORDER if PRIORITY_ORDER[k] >= 60)
 
@@ -234,11 +241,10 @@ class DiffProcessor:
                 priority.append(f)
                 accumulated += patch_len
             else:
-                # 低优文件：裁剪 patch 为前 600 字符 + 统计信息
                 truncated_patch = ""
                 if patch:
                     truncated_patch = (
-                        patch[:600]
+                        patch[:2000]
                         + "\n... (低优文件，已截断，完整变更 {} 行)".format(
                             patch.count("\n") + 1
                         )
