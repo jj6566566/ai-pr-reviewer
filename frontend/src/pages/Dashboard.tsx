@@ -2332,13 +2332,13 @@ function TrendPanel() {
               <p className="text-sm text-slate-500 text-center py-8">暂无足够数据生成趋势</p>
             ) : (
               <>
-                <div className="flex items-stretch gap-1 h-48 mb-3">
+                <div className="flex justify-center items-end gap-2 h-48 mb-3">
                   {data.data_points.map((dp, idx) => {
                     const total = dp.low_count + dp.medium_count + dp.high_count + dp.critical_count || 1;
                     return (
                       <div
                         key={idx}
-                        className="flex-1 flex flex-col-reverse min-w-[12px]"
+                        className="w-10 flex-shrink-0 flex flex-col-reverse"
                         title={`${formatDay(dp.day)}: ${dp.pr_count} PRs`}
                       >
                         <div
@@ -2362,9 +2362,9 @@ function TrendPanel() {
                   })}
                 </div>
 
-                <div className="flex gap-1">
+                <div className="flex justify-center gap-2">
                   {data.data_points.map((dp, idx) => (
-                    <div key={idx} className="flex-1 text-center min-w-[12px]">
+                    <div key={idx} className="w-10 flex-shrink-0 text-center">
                       <span className="text-[9px] text-slate-600">
                         {formatDay(dp.day)}
                       </span>
