@@ -1,3 +1,4 @@
-from .pr_analysis import PRAnalysis
+from .pr_analysis import CustomRule, PRAnalysis
+from .user import User
 
-__all__ = ["PRAnalysis"]
+__all__ = ["CustomRule", "PRAnalysis", "User"]

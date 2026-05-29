@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 from backend.models.pr_analysis import Base
+from backend.models.user import User  # noqa: F401 — ensure table metadata is registered
 
 load_dotenv()
 
