@@ -13,9 +13,14 @@ from backend.schemas.review import (
     BatchAnalyzeResponse,
     BatchOverview,
     BatchRiskCard,
+    CrossPRDuplicateResult,
+    DuplicateRiskPatternItem,
     FileInfo,
+    FileOverlapItem,
     PRInfoResponse,
+    SimilarCodeBlockItem,
 )
+from backend.services.duplicate_detector import detect_cross_pr_duplicates
 from backend.services.github import github_service
 from backend.services.reviewer import reviewer_service
 from backend.store import get_analysis_by_id, get_recent_analyses, save_analysis
@@ -130,7 +135,44 @@ async def batch_analyze(request: BatchAnalyzeRequest, db: AsyncSession = Depends
         results.append(response)
 
     overview = _compute_batch_overview(results)
-    return BatchAnalyzeResponse(results=results, overview=overview)
+
+    duplicate_analysis = None
+    try:
+        dup_result = detect_cross_pr_duplicates(results)
+        duplicate_analysis = CrossPRDuplicateResult(
+            file_overlaps=[
+                FileOverlapItem(
+                    filename=fo.filename,
+                    pr_numbers=fo.pr_numbers,
+                    changes_detail=fo.changes_detail,
+                )
+                for fo in dup_result.file_overlaps
+            ],
+            similar_code_blocks=[
+                SimilarCodeBlockItem(
+                    block_hash=sc.block_hash,
+                    pr_numbers=sc.pr_numbers,
+                    files=sc.files,
+                    similarity_score=sc.similarity_score,
+                    snippet_preview=sc.snippet_preview,
+                )
+                for sc in dup_result.similar_code_blocks
+            ],
+            duplicate_risk_patterns=[
+                DuplicateRiskPatternItem(
+                    description=dp.description,
+                    affected_prs=dp.affected_prs,
+                    severity=dp.severity,
+                    occurrence_count=dp.occurrence_count,
+                )
+                for dp in dup_result.duplicate_risk_patterns
+            ],
+            summary=dup_result.summary,
+        )
+    except Exception as e:
+        logger.error("跨PR重复检测失败: %s", e)
+
+    return BatchAnalyzeResponse(results=results, overview=overview, duplicate_analysis=duplicate_analysis)
 
 
 SEVERITY_WEIGHT = {"critical": 4, "high": 3, "medium": 2, "low": 1}

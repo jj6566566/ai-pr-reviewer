@@ -27,6 +27,7 @@ import {
   Gauge,
   Zap,
   Layers,
+  GitMerge,
 } from 'lucide-react';
 import { analyzePR, fetchHistory, fetchHistoryDetail, analyzeBatch } from '../api/review';
 import type {
@@ -39,6 +40,8 @@ import type {
   BatchAnalyzeItem,
   BatchAnalyzeResponse,
   RiskLevel,
+  CrossPRDuplicateResult,
+  RiskSeverity,
 } from '../types/review';
 import {
   RISK_SEVERITY_CONFIG,
@@ -910,6 +913,151 @@ function BatchResultView({ data, onReset }: BatchResultViewProps) {
                 <span className="text-sm text-slate-300 leading-relaxed">{risk}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {data.duplicate_analysis && (
+        <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-6 mb-6">
+          <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <GitMerge className="w-5 h-5 text-sky-400" />
+            跨PR重复检测
+          </h2>
+
+          {data.duplicate_analysis.summary && (
+            <p className="text-sm text-sky-400 mb-4 font-medium">
+              {data.duplicate_analysis.summary}
+            </p>
+          )}
+
+          <div className="mb-5">
+            <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+              文件重叠
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-700/60 text-slate-300">
+                {data.duplicate_analysis.file_overlaps.length}
+              </span>
+            </h3>
+            {data.duplicate_analysis.file_overlaps.length === 0 ? (
+              <p className="text-sm text-slate-500">未发现文件重叠</p>
+            ) : (
+              <div className="space-y-2">
+                {data.duplicate_analysis.file_overlaps.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-3 rounded-lg bg-slate-800/50 border border-slate-700/40 px-3 py-2.5"
+                  >
+                    <span className="text-sm text-slate-200 truncate flex-1 min-w-0">
+                      {item.filename}
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {item.pr_numbers.map((pr) => (
+                        <span
+                          key={pr}
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-violet-950/50 text-violet-400 border border-violet-500/30"
+                        >
+                          #{pr}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mb-5">
+            <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+              相似代码片段
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-700/60 text-slate-300">
+                {data.duplicate_analysis.similar_code_blocks.length}
+              </span>
+            </h3>
+            {data.duplicate_analysis.similar_code_blocks.length === 0 ? (
+              <p className="text-sm text-slate-500">未发现相似代码片段</p>
+            ) : (
+              <div className="space-y-3">
+                {data.duplicate_analysis.similar_code_blocks.map((block, idx) => {
+                  const scoreColor =
+                    block.similarity_score >= 90
+                      ? 'text-red-400'
+                      : block.similarity_score >= 80
+                        ? 'text-orange-400'
+                        : 'text-yellow-400';
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-lg bg-slate-800/50 border border-slate-700/40 p-3"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`text-sm font-bold ${scoreColor}`}>
+                          {block.similarity_score}%
+                        </span>
+                        <span className="text-xs text-slate-500 truncate">
+                          {block.files.join(', ')}
+                        </span>
+                        <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                          {block.pr_numbers.map((pr) => (
+                            <span
+                              key={pr}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-violet-950/50 text-violet-400 border border-violet-500/30"
+                            >
+                              #{pr}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {block.snippet_preview && (
+                        <pre className="text-xs text-slate-400 bg-slate-900/60 rounded p-2 overflow-x-auto">
+                          <code>{block.snippet_preview}</code>
+                        </pre>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+              重复风险模式
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-700/60 text-slate-300">
+                {data.duplicate_analysis.duplicate_risk_patterns.length}
+              </span>
+            </h3>
+            {data.duplicate_analysis.duplicate_risk_patterns.length === 0 ? (
+              <p className="text-sm text-slate-500">未发现重复风险模式</p>
+            ) : (
+              <div className="space-y-2">
+                {data.duplicate_analysis.duplicate_risk_patterns.map((pattern, idx) => {
+                  const severityKey = pattern.severity as RiskSeverity;
+                  const severityConfig =
+                    RISK_SEVERITY_CONFIG[severityKey] ?? RISK_SEVERITY_CONFIG.medium;
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-lg bg-slate-800/50 border border-slate-700/40 p-3"
+                    >
+                      <div className="flex items-start gap-2 mb-1.5">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${severityConfig.bgClass} ${severityConfig.textClass} whitespace-nowrap mt-0.5`}
+                        >
+                          {severityConfig.label}
+                        </span>
+                        <span className="text-sm text-slate-200">{pattern.description}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <span>
+                          涉及 PR:{' '}
+                          {pattern.affected_prs.map((p) => `#${p}`).join(', ')}
+                        </span>
+                        <span>出现 {pattern.occurrence_count} 次</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
