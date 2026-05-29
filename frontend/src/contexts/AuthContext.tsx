@@ -1,0 +1,47 @@
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { getCurrentUser, getLoginUrl, logout as apiLogout } from '../api/auth';
+import type { User } from '../types/auth';
+
+interface AuthState {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthState | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    getCurrentUser().then((u) => {
+      setUser(u);
+      setIsLoading(false);
+    });
+  }, []);
+
+  const login = useCallback(async () => {
+    const url = await getLoginUrl();
+    window.location.href = url;
+  }, []);
+
+  const logout = useCallback(async () => {
+    await apiLogout();
+    setUser(null);
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth(): AuthState {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
+}

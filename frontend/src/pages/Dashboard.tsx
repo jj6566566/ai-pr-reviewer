@@ -64,6 +64,10 @@ import {
   RISK_LEVEL_SCORE_CONFIG,
 } from '../types/review';
 import UrlParser from '../components/UrlParser';
+import LoginButton from '../components/LoginButton';
+import RepoSelector from '../components/RepoSelector';
+import PRList from '../components/PRList';
+import { useAuth } from '../contexts/AuthContext';
 
 // ===== 页面状态类型 =====
 
@@ -73,23 +77,24 @@ type DashboardMode = 'single' | 'batch' | 'trends';
 
 // ===== 子组件 =====
 
-/** 页头品牌区域 */
-function BrandHeader() {
+function TopNavbar() {
   return (
-    <header className="text-center mb-10 pt-8">
-      <div className="inline-flex items-center gap-3 mb-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center shadow-lg shadow-sky-500/25">
-          <GitPullRequest className="w-5 h-5 text-white" />
+    <div className="w-full max-w-4xl mx-auto mb-8">
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+              <GitPullRequest className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h1 className="text-sm font-semibold text-slate-200">AI PR Review</h1>
+              <p className="text-[10px] text-slate-500">智能化代码审查</p>
+            </div>
+          </div>
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          <span className="text-sky-400">AI</span>
-          <span className="text-slate-200"> PR Review</span>
-        </h1>
+        <LoginButton />
       </div>
-      <p className="text-slate-400 text-sm max-w-md mx-auto">
-        智能化代码审查，自动识别潜在风险与改进建议
-      </p>
-    </header>
+    </div>
   );
 }
 
@@ -97,13 +102,16 @@ function BrandHeader() {
 interface InputFormProps {
   onSubmit: (owner: string, repo: string, prNumber: number) => void;
   isLoading: boolean;
+  initialOwner?: string;
+  initialRepo?: string;
+  initialPrNumber?: string;
 }
 
 /** 输入表单区域 */
-function InputForm({ onSubmit, isLoading }: InputFormProps) {
-  const [owner, setOwner] = useState('');
-  const [repo, setRepo] = useState('');
-  const [prNumber, setPrNumber] = useState('');
+function InputForm({ onSubmit, isLoading, initialOwner = '', initialRepo = '', initialPrNumber = '' }: InputFormProps) {
+  const [owner, setOwner] = useState(initialOwner);
+  const [repo, setRepo] = useState(initialRepo);
+  const [prNumber, setPrNumber] = useState(initialPrNumber);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -1476,6 +1484,7 @@ function HistoryPanel({ refreshTrigger }: HistoryPanelProps) {
 // ===== 主 Dashboard 组件 =====
 
 export default function Dashboard() {
+  const { isAuthenticated } = useAuth();
   const [mode, setMode] = useState<DashboardMode>('single');
   const [pageStatus, setPageStatus] = useState<PageStatus>('idle');
   const [resultData, setResultData] = useState<AnalyzeResponse | null>(null);
@@ -1490,6 +1499,9 @@ export default function Dashboard() {
   const [batchStatus, setBatchStatus] = useState<PageStatus>('idle');
   const [batchResult, setBatchResult] = useState<BatchAnalyzeResponse | null>(null);
   const [batchError, setBatchError] = useState('');
+
+  const [selectedRepo, setSelectedRepo] = useState<{ owner: string; repo: string } | null>(null);
+  const [selectedPR, setSelectedPR] = useState<{ owner: string; repo: string; number: number } | null>(null);
 
   useEffect(() => {
     if (pageStatus === 'success') {
@@ -1576,7 +1588,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen px-4 pb-16">
-      <BrandHeader />
+      <TopNavbar />
 
       <div className="flex justify-center mb-8">
         <div className="inline-flex rounded-lg bg-slate-800/60 border border-slate-700/50 p-1">
@@ -1625,7 +1637,31 @@ export default function Dashboard() {
 
       {mode === 'single' && (
         <>
-          <InputForm onSubmit={handleAnalyze} isLoading={pageStatus === 'loading'} />
+          {isAuthenticated && (
+            <div className="w-full max-w-2xl mx-auto mb-4 space-y-3">
+              <RepoSelector onSelect={(owner, repo) => {
+                setSelectedRepo({ owner, repo });
+                setSelectedPR(null);
+              }} />
+              {selectedRepo && (
+                <PRList
+                  owner={selectedRepo.owner}
+                  repo={selectedRepo.repo}
+                  onSelectPR={(owner, repo, number) => {
+                    setSelectedPR({ owner, repo, number });
+                  }}
+                />
+              )}
+            </div>
+          )}
+          <InputForm
+            key={selectedPR ? `${selectedPR.owner}/${selectedPR.repo}/${selectedPR.number}` : 'input-form'}
+            onSubmit={handleAnalyze}
+            isLoading={pageStatus === 'loading'}
+            initialOwner={selectedPR?.owner}
+            initialRepo={selectedPR?.repo}
+            initialPrNumber={selectedPR ? String(selectedPR.number) : undefined}
+          />
           <HistoryPanel refreshTrigger={historyRefreshKey} />
 
           {pageStatus === 'loading' && <LoadingState />}
