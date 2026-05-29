@@ -1271,6 +1271,20 @@ function CustomRulesPanel() {
     }
   };
 
+  const handleToggle = async (rule: CustomRule) => {
+    const prevEnabled = rule.is_enabled;
+    setRules((prev) =>
+      prev.map((r) => (r.id === rule.id ? { ...r, is_enabled: !r.is_enabled } : r))
+    );
+    try {
+      await updateRule(rule.id, { is_enabled: !prevEnabled });
+    } catch {
+      setRules((prev) =>
+        prev.map((r) => (r.id === rule.id ? { ...r, is_enabled: prevEnabled } : r))
+      );
+    }
+  };
+
   const inputClass =
     'w-full bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 outline-none transition-all duration-200 focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/30';
 
@@ -1309,9 +1323,16 @@ function CustomRulesPanel() {
                   预设
                 </span>
               )}
-              <span
-                className={`inline-flex items-center gap-1 text-[11px] ml-auto ${
-                  rule.is_enabled ? 'text-emerald-400' : 'text-slate-500'
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggle(rule);
+                }}
+                className={`inline-flex items-center gap-1 text-[11px] ml-auto px-2 py-1 rounded-md transition-colors ${
+                  rule.is_enabled
+                    ? 'text-emerald-400 hover:bg-emerald-950/30'
+                    : 'text-slate-500 hover:bg-slate-800'
                 }`}
               >
                 <span
@@ -1320,7 +1341,7 @@ function CustomRulesPanel() {
                   }`}
                 />
                 {rule.is_enabled ? '已启用' : '已禁用'}
-              </span>
+              </button>
             </div>
 
             {rule.description && (
