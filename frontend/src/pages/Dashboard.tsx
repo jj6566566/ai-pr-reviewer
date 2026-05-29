@@ -27,6 +27,7 @@ import {
   RISK_SEVERITY_CONFIG,
   SUGGESTION_CATEGORY_CONFIG,
   SEVERITY_ORDER,
+  RISK_LEVEL_SCORE_CONFIG,
 } from '../types/review';
 
 // ===== 页面状态类型 =====
@@ -265,6 +266,33 @@ function SummaryCard({ data }: { data: AnalyzeResponse }) {
           {summary}
         </p>
       </div>
+
+      {/* 风险评分 */}
+      {(() => {
+        const scoreConfig = RISK_LEVEL_SCORE_CONFIG[data.risk_level];
+        return (
+          <div className="flex items-center gap-4 mb-5">
+            {/* 左侧：风险分大数字 */}
+            <div
+              className={`flex-shrink-0 w-16 h-16 rounded-full ring-2 ${scoreConfig.ringClass} ${scoreConfig.bgClass} flex items-center justify-center`}
+            >
+              <span className={`text-2xl font-extrabold ${scoreConfig.textClass}`}>
+                {data.risk_score}
+              </span>
+            </div>
+
+            {/* 右侧：风险等级 + 审查时间 */}
+            <div className="flex flex-col gap-0.5">
+              <span className={`text-sm font-semibold ${scoreConfig.textClass}`}>
+                {scoreConfig.label}
+              </span>
+              <span className="text-xs text-slate-500">
+                预计审查: ~{data.estimated_review_minutes} 分钟
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 统计指标 */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
