@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.routers import auth, review, webhook
+from backend.routers import auth, github_proxy, review, webhook
 
 app = FastAPI(
     title="AI PR Review",
@@ -19,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(github_proxy.router)
 app.include_router(review.router)
 app.include_router(webhook.router)
 
