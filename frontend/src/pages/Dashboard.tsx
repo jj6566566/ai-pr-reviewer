@@ -30,6 +30,7 @@ import {
   GitMerge,
   TrendingUp,
   Settings,
+  Plus,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
