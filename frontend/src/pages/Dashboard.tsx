@@ -2332,7 +2332,7 @@ function TrendPanel() {
               <p className="text-sm text-slate-500 text-center py-8">暂无足够数据生成趋势</p>
             ) : (
               <>
-                <div className="flex justify-center items-end gap-2 h-48 mb-3">
+                <div className="flex justify-center items-stretch gap-2 h-48 mb-3">
                   {data.data_points.map((dp, idx) => {
                     const total = dp.low_count + dp.medium_count + dp.high_count + dp.critical_count || 1;
                     return (
