@@ -3,7 +3,7 @@
  * @description AI PR Review API 调用封装
  */
 
-import type { AnalyzeRequest, AnalyzeResponse } from '../types/review';
+import type { AnalyzeRequest, AnalyzeResponse, AnalyzeResult } from '../types/review';
 
 /** API 基础路径（通过 Vite proxy 转发到后端） */
 const API_BASE = '/api';
@@ -11,9 +11,9 @@ const API_BASE = '/api';
 /**
  * 发起 PR 分析请求
  * @param params - owner、repo、prNumber 参数
- * @returns 分析结果（成功或失败响应）
+ * @returns 分析结果（成功则包含后端数据，失败则包含错误信息）
  */
-export async function analyzePR(params: AnalyzeRequest): Promise<AnalyzeResponse> {
+export async function analyzePR(params: AnalyzeRequest): Promise<AnalyzeResult> {
   const { owner, repo, prNumber } = params;
 
   const response = await fetch(`${API_BASE}/review/analyze`, {
@@ -48,5 +48,8 @@ export async function analyzePR(params: AnalyzeRequest): Promise<AnalyzeResponse
   }
 
   const data: AnalyzeResponse = await response.json();
-  return data;
+  return {
+    success: true,
+    data,
+  };
 }

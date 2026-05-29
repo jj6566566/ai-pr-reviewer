@@ -4,7 +4,7 @@
  * 提供 PR 输入、分析触发、结果展示（摘要/风险/建议）完整交互流程
  */
 
-import { useState, type FormEvent } from 'react';
+import { useState, useMemo, type FormEvent } from 'react';
 import {
   GitPullRequest,
   Loader2,
@@ -12,20 +12,21 @@ import {
   Lightbulb,
   ShieldAlert,
   FileCode2,
-  Clock,
   Search,
   GitBranch,
+  MapPin,
 } from 'lucide-react';
 import { analyzePR } from '../api/review';
 import type {
-  AnalyzeSuccessResponse,
+  AnalyzeResponse,
   RiskItem,
   SuggestionItem,
+  SuggestionCategory,
 } from '../types/review';
 import {
-  RiskSeverity,
   RISK_SEVERITY_CONFIG,
   SUGGESTION_CATEGORY_CONFIG,
+  SEVERITY_ORDER,
 } from '../types/review';
 
 // ===== 页面状态类型 =====
@@ -205,68 +206,8 @@ function ErrorState({ error, onRetry }: ErrorStateProps) {
 
 /** 结果展示区域 Props */
 interface ResultSectionProps {
-  data: AnalyzeSuccessResponse;
+  data: AnalyzeResponse;
   onReset: () => void;
-}
-
-/** 评分环颜色映射 */
-function getScoreColor(score: number): string {
-  if (score >= 80) return 'text-emerald-400';
-  if (score >= 60) return 'text-yellow-400';
-  if (score >= 40) return 'text-orange-400';
-  return 'text-red-400';
-}
-
-/** PR 摘要卡片 */
-function SummaryCard({ data }: { data: AnalyzeSuccessResponse }) {
-  const { summary, analysisTime } = data;
-  const scoreColor = getScoreColor(summary.score);
-
-  return (
-    <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-6 mb-6">
-      <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-        <FileCode2 className="w-5 h-5 text-sky-400" />
-        PR 摘要
-      </h2>
-
-      {/* PR 标题 + 评分 */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-bold text-white leading-snug truncate">
-            {summary.title}
-          </h3>
-          <p className="text-slate-400 text-sm mt-1 line-clamp-2">
-            {summary.description}
-          </p>
-        </div>
-        <div className="flex-shrink-0 flex items-center gap-3 bg-slate-800/70 rounded-xl px-4 py-3">
-          <div className="text-center">
-            <span className={`text-3xl font-bold ${scoreColor}`}>{summary.score}</span>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">
-              综合评分
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* 统计指标 */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <StatItem label="变更文件" value={summary.filesChanged} />
-        <StatItem label="新增行" value={summary.additions} color="text-emerald-400" />
-        <StatItem label="删除行" value={summary.deletions} color="text-red-400" />
-        <StatItem label="风险项" value={summary.totalRisks} color="text-orange-400" />
-        <StatItem label="建议" value={summary.totalSuggestions} color="text-sky-400" />
-      </div>
-
-      {/* 耗时 */}
-      {analysisTime !== undefined && (
-        <div className="mt-4 flex items-center gap-1.5 text-xs text-slate-500">
-          <Clock className="w-3.5 h-3.5" />
-          分析耗时 {analysisTime.toFixed(1)} 秒
-        </div>
-      )}
-    </div>
-  );
 }
 
 /** 统计指标小方块 */
@@ -287,42 +228,86 @@ function StatItem({
   );
 }
 
+/** PR 摘要卡片 */
+function SummaryCard({ data }: { data: AnalyzeResponse }) {
+  const { pr_info, summary } = data;
+  const riskCount = data.risk_items.length;
+  const suggestionCount = data.suggestions.length;
+
+  return (
+    <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-6 mb-6">
+      <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+        <FileCode2 className="w-5 h-5 text-sky-400" />
+        PR 摘要
+      </h2>
+
+      {/* PR 标题 */}
+      <div className="mb-5">
+        <h3 className="text-lg font-bold text-white leading-snug">
+          {pr_info.title}
+        </h3>
+        <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+          <span>
+            {pr_info.owner}/{pr_info.repo}#{pr_info.number}
+          </span>
+          <span className="text-slate-600">|</span>
+          <span>{pr_info.author}</span>
+          <span className="text-slate-600">|</span>
+          <span>
+            {pr_info.base_branch} &larr; {pr_info.head_branch}
+          </span>
+        </p>
+      </div>
+
+      {/* 摘要文本 */}
+      <div className="rounded-lg bg-slate-800/60 border border-slate-700/40 p-4 mb-5">
+        <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
+          {summary}
+        </p>
+      </div>
+
+      {/* 统计指标 */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <StatItem label="变更文件" value={pr_info.files_changed} />
+        <StatItem label="新增行" value={pr_info.additions} color="text-emerald-400" />
+        <StatItem label="删除行" value={pr_info.deletions} color="text-red-400" />
+        <StatItem label="风险项" value={riskCount} color="text-orange-400" />
+        <StatItem label="建议" value={suggestionCount} color="text-sky-400" />
+      </div>
+    </div>
+  );
+}
+
 /** 风险列表 */
-function RiskList({ risks }: { risks: RiskItem[] }) {
-  if (risks.length === 0) {
+function RiskList({ riskItems }: { riskItems: RiskItem[] }) {
+  // 按严重程度排序：critical > high > medium > low
+  const sorted = useMemo(
+    () =>
+      [...riskItems].sort(
+        (a, b) =>
+          (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99),
+      ),
+    [riskItems],
+  );
+
+  if (riskItems.length === 0) {
     return (
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-200 mb-3 flex items-center gap-2">
           <ShieldAlert className="w-5 h-5 text-emerald-400" />
           风险项
         </h2>
-        <p className="text-sm text-emerald-400/80">
-          未发现风险项，代码质量良好
-        </p>
+        <p className="text-sm text-emerald-400/80">未发现风险项，代码质量良好</p>
       </div>
     );
   }
-
-  // 按严重程度排序
-  const severityOrder: Record<string, number> = {
-    [RiskSeverity.Critical]: 0,
-    [RiskSeverity.High]: 1,
-    [RiskSeverity.Medium]: 2,
-    [RiskSeverity.Low]: 3,
-  };
-  const sorted = [...risks].sort(
-    (a, b) =>
-      (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99)
-  );
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-6 mb-6">
       <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
         <ShieldAlert className="w-5 h-5 text-orange-400" />
         风险项
-        <span className="text-xs text-slate-500 ml-auto">
-          共 {risks.length} 项
-        </span>
+        <span className="text-xs text-slate-500 ml-auto">共 {riskItems.length} 项</span>
       </h2>
 
       <div className="space-y-3">
@@ -340,20 +325,33 @@ function RiskList({ risks }: { risks: RiskItem[] }) {
                   {config.label}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold text-slate-200">
-                    {risk.title}
-                  </h4>
-                  <p className="text-sm text-slate-400 mt-1 leading-relaxed">
+                  {/* 文件路径 + 行号 */}
+                  <p className="text-xs text-slate-500 flex items-center gap-1 mb-1.5">
+                    <FileCode2 className="w-3 h-3" />
+                    {risk.file}
+                    {risk.line > 0 && (
+                      <>
+                        <MapPin className="w-3 h-3 ml-1" />
+                        <span className="text-slate-600">L{risk.line}</span>
+                      </>
+                    )}
+                  </p>
+
+                  {/* 风险描述 */}
+                  <p className="text-sm text-slate-200 leading-relaxed">
                     {risk.description}
                   </p>
-                  {risk.filePath && (
-                    <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
-                      <FileCode2 className="w-3 h-3" />
-                      {risk.filePath}
-                      {risk.lineRange && (
-                        <span className="text-slate-600">{risk.lineRange}</span>
-                      )}
-                    </p>
+
+                  {/* 修复建议 */}
+                  {risk.suggestion && (
+                    <div className="mt-2 rounded-md bg-slate-900/60 border border-slate-700/40 p-3">
+                      <p className="text-[11px] font-semibold text-sky-400 uppercase tracking-wide mb-1">
+                        修复建议
+                      </p>
+                      <p className="text-sm text-slate-400 leading-relaxed">
+                        {risk.suggestion}
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -365,8 +363,27 @@ function RiskList({ risks }: { risks: RiskItem[] }) {
   );
 }
 
+/** 按 category 分组建议 */
+function groupSuggestionsByCategory(
+  suggestions: SuggestionItem[],
+): Map<SuggestionCategory, SuggestionItem[]> {
+  const groups = new Map<SuggestionCategory, SuggestionItem[]>();
+  for (const s of suggestions) {
+    const list = groups.get(s.category);
+    if (list) {
+      list.push(s);
+    } else {
+      groups.set(s.category, [s]);
+    }
+  }
+  return groups;
+}
+
 /** 建议列表 */
 function SuggestionList({ suggestions }: { suggestions: SuggestionItem[] }) {
+  // 按 category 分组
+  const groups = useMemo(() => groupSuggestionsByCategory(suggestions), [suggestions]);
+
   if (suggestions.length === 0) {
     return (
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-6 mb-6">
@@ -374,9 +391,7 @@ function SuggestionList({ suggestions }: { suggestions: SuggestionItem[] }) {
           <Lightbulb className="w-5 h-5 text-emerald-400" />
           改进建议
         </h2>
-        <p className="text-sm text-emerald-400/80">
-          暂无改进建议
-        </p>
+        <p className="text-sm text-emerald-400/80">暂无改进建议</p>
       </div>
     );
   }
@@ -386,44 +401,54 @@ function SuggestionList({ suggestions }: { suggestions: SuggestionItem[] }) {
       <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
         <Lightbulb className="w-5 h-5 text-yellow-400" />
         改进建议
-        <span className="text-xs text-slate-500 ml-auto">
-          共 {suggestions.length} 条
-        </span>
+        <span className="text-xs text-slate-500 ml-auto">共 {suggestions.length} 条</span>
       </h2>
 
-      <div className="space-y-3">
-        {suggestions.map((suggestion, idx) => {
-          const catConfig = SUGGESTION_CATEGORY_CONFIG[suggestion.category];
+      <div className="space-y-5">
+        {Array.from(groups.entries()).map(([category, items]) => {
+          const catConfig = SUGGESTION_CATEGORY_CONFIG[category];
           return (
-            <div
-              key={idx}
-              className="rounded-lg bg-slate-800/50 border border-slate-700/40 p-4 transition-colors hover:border-slate-600/50"
-            >
-              <div className="flex items-start gap-3">
+            <div key={category}>
+              {/* 分组标题 */}
+              <div className="flex items-center gap-2 mb-2.5">
                 <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${catConfig.textClass} ${catConfig.bgClass} whitespace-nowrap mt-0.5`}
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold ${catConfig.textClass} ${catConfig.bgClass}`}
                 >
                   {catConfig.label}
                 </span>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold text-slate-200">
-                    {suggestion.title}
-                  </h4>
-                  <p className="text-sm text-slate-400 mt-1 leading-relaxed">
-                    {suggestion.description}
-                  </p>
-                  {suggestion.codeExample && (
-                    <pre className="mt-3 rounded-md bg-slate-900/80 border border-slate-700/50 p-3 text-xs text-slate-300 overflow-x-auto">
-                      <code>{suggestion.codeExample}</code>
-                    </pre>
-                  )}
-                  {suggestion.filePath && (
-                    <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
-                      <FileCode2 className="w-3 h-3" />
-                      {suggestion.filePath}
+                <span className="text-[11px] text-slate-500">
+                  {items.length} 条
+                </span>
+              </div>
+
+              {/* 分组内的建议项 */}
+              <div className="space-y-3">
+                {items.map((suggestion, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-lg bg-slate-800/50 border border-slate-700/40 p-4 transition-colors hover:border-slate-600/50"
+                  >
+                    {/* 文件路径 */}
+                    {suggestion.file && (
+                      <p className="text-xs text-slate-500 flex items-center gap-1 mb-2">
+                        <FileCode2 className="w-3 h-3" />
+                        {suggestion.file}
+                      </p>
+                    )}
+
+                    {/* 建议描述 */}
+                    <p className="text-sm text-slate-200 leading-relaxed">
+                      {suggestion.description}
                     </p>
-                  )}
-                </div>
+
+                    {/* 代码片段 */}
+                    {suggestion.code_snippet && (
+                      <pre className="mt-3 rounded-md bg-slate-900/80 border border-slate-700/50 p-3 text-xs text-slate-300 overflow-x-auto">
+                        <code>{suggestion.code_snippet}</code>
+                      </pre>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           );
@@ -461,7 +486,7 @@ function ResultSection({ data, onReset }: ResultSectionProps) {
       </div>
 
       <SummaryCard data={data} />
-      <RiskList risks={data.risks} />
+      <RiskList riskItems={data.risk_items} />
       <SuggestionList suggestions={data.suggestions} />
       <ResetBar onReset={onReset} />
     </div>
@@ -472,7 +497,7 @@ function ResultSection({ data, onReset }: ResultSectionProps) {
 
 export default function Dashboard() {
   const [pageStatus, setPageStatus] = useState<PageStatus>('idle');
-  const [resultData, setResultData] = useState<AnalyzeSuccessResponse | null>(null);
+  const [resultData, setResultData] = useState<AnalyzeResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   // 缓存最近一次请求参数用于重试
   const [lastParams, setLastParams] = useState<{
@@ -492,7 +517,7 @@ export default function Dashboard() {
       const response = await analyzePR({ owner, repo, prNumber });
 
       if (response.success) {
-        setResultData(response);
+        setResultData(response.data);
         setPageStatus('success');
       } else {
         setErrorMessage(response.error || '未知错误，请稍后重试');
