@@ -144,6 +144,35 @@ export interface BatchOverview {
 export interface BatchAnalyzeResponse {
   results: AnalyzeResponse[];
   overview: BatchOverview;
+  duplicate_analysis?: CrossPRDuplicateResult | null;
+}
+
+export interface FileOverlapItem {
+  filename: string;
+  pr_numbers: number[];
+  changes_detail: { pr_number: number; status: string; additions: number; deletions: number }[];
+}
+
+export interface SimilarCodeBlockItem {
+  block_hash: string;
+  pr_numbers: number[];
+  files: string[];
+  similarity_score: number;
+  snippet_preview: string;
+}
+
+export interface DuplicateRiskPatternItem {
+  description: string;
+  affected_prs: number[];
+  severity: string;
+  occurrence_count: number;
+}
+
+export interface CrossPRDuplicateResult {
+  file_overlaps: FileOverlapItem[];
+  similar_code_blocks: SimilarCodeBlockItem[];
+  duplicate_risk_patterns: DuplicateRiskPatternItem[];
+  summary: string;
 }
 
 // ===== API 层适配类型 =====

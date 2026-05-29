@@ -86,6 +86,35 @@ class BatchOverview(BaseModel):
     top_risks: list[str]
 
 
+class FileOverlapItem(BaseModel):
+    filename: str
+    pr_numbers: list[int]
+    changes_detail: list[dict]
+
+
+class SimilarCodeBlockItem(BaseModel):
+    block_hash: str
+    pr_numbers: list[int]
+    files: list[str]
+    similarity_score: float
+    snippet_preview: str
+
+
+class DuplicateRiskPatternItem(BaseModel):
+    description: str
+    affected_prs: list[int]
+    severity: str
+    occurrence_count: int
+
+
+class CrossPRDuplicateResult(BaseModel):
+    file_overlaps: list[FileOverlapItem]
+    similar_code_blocks: list[SimilarCodeBlockItem]
+    duplicate_risk_patterns: list[DuplicateRiskPatternItem]
+    summary: str
+
+
 class BatchAnalyzeResponse(BaseModel):
     results: list[AnalyzeResponse]
     overview: BatchOverview
+    duplicate_analysis: Optional[CrossPRDuplicateResult] = None
