@@ -1,23 +1,22 @@
-/**
- * @file src/App.tsx
- * @description 应用根组件 - 配置路由表
- */
-
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
+import Settings from './pages/Settings';
+import ProtectedRoute from './components/ProtectedRoute';
 
-/**
- * App 路由配置：
- * - /          -> Dashboard 主页
- * - 未匹配路由  -> 重定向到 /
- */
-function App() {
+export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/settings" element={
+            <ProtectedRoute><Settings /></ProtectedRoute>
+          } />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
-
-export default App;
