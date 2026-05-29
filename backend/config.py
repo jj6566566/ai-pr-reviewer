@@ -23,6 +23,8 @@ class Settings:
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
     DEEPSEEK_BASE_URL: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 
+    WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "")
+
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
 
