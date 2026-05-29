@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+import certifi
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -46,7 +47,7 @@ async def list_repos(
 
     if q:
         url = f"https://api.github.com/search/repositories?q={q}+fork:true&sort=updated&per_page=30"
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=15.0, verify=certifi.where()) as client:
             resp = await client.get(url, headers=headers)
             resp.raise_for_status()
             data = resp.json()
@@ -63,7 +64,7 @@ async def list_repos(
             ]
 
     url = "https://api.github.com/user/repos?sort=updated&per_page=30&type=all"
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, verify=certifi.where()) as client:
         resp = await client.get(url, headers=headers)
         if resp.status_code == 401:
             raise HTTPException(status_code=401, detail="GitHub token 已失效，请重新登录")
@@ -84,7 +85,7 @@ async def list_pulls(
     }
 
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls?state=open&sort=updated&per_page=30"
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, verify=certifi.where()) as client:
         resp = await client.get(url, headers=headers)
         if resp.status_code == 404:
             return []

@@ -4,6 +4,7 @@ import logging
 import secrets
 from urllib.parse import urlencode
 
+import certifi
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -83,7 +84,7 @@ async def callback(
 
     # --- 换取 access_token --------------------------------------------------
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=certifi.where()) as client:
             token_resp = await client.post(
                 "https://github.com/login/oauth/access_token",
                 json={
@@ -111,7 +112,7 @@ async def callback(
 
     # --- 获取 GitHub 用户信息 ------------------------------------------------
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=certifi.where()) as client:
             user_resp = await client.get(
                 "https://api.github.com/user",
                 headers={
