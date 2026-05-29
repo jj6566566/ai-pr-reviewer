@@ -86,45 +86,20 @@ function BrandHeader() {
 interface InputFormProps {
   onSubmit: (owner: string, repo: string, prNumber: number, modeId?: number) => void;
   isLoading: boolean;
+  modes: ReviewMode[];
 }
 
-/** 输入表单区域 */
-function InputForm({ onSubmit, isLoading }: InputFormProps) {
+function InputForm({ onSubmit, isLoading, modes }: InputFormProps) {
   const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
   const [prNumber, setPrNumber] = useState('');
-  const [modes, setModes] = useState<ReviewMode[]>([]);
   const [selectedModeId, setSelectedModeId] = useState<number | undefined>(undefined);
-  const [modesLoading, setModesLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadModes = async () => {
-      try {
-        setModesLoading(true);
-        const data = await fetchModes();
-        if (!cancelled) {
-          setModes(data);
-          const defaultMode = data.length > 0 ? data[0] : null;
-          if (defaultMode) {
-            setSelectedModeId(defaultMode.id);
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setModes([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setModesLoading(false);
-        }
-      }
-    };
-    loadModes();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (modes.length > 0 && selectedModeId === undefined) {
+      setSelectedModeId(modes[0].id);
+    }
+  }, [modes, selectedModeId]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -197,12 +172,7 @@ function InputForm({ onSubmit, isLoading }: InputFormProps) {
 
       {/* 评审模式选择器 */}
       <div className="mb-3">
-        {modesLoading ? (
-          <div className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-500">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            加载模式...
-          </div>
-        ) : modes.length > 0 ? (
+        {modes.length > 0 ? (
           <select
             value={selectedModeId ?? ''}
             onChange={(e) => {
@@ -218,9 +188,7 @@ function InputForm({ onSubmit, isLoading }: InputFormProps) {
               </option>
             ))}
           </select>
-        ) : (
-          <div className="text-sm text-slate-500 px-4 py-2.5">无可用模式</div>
-        )}
+        ) : null}
       </div>
 
       {/* 提交按钮 */}
@@ -1984,7 +1952,7 @@ export default function Dashboard() {
 
       {mode === 'single' && (
         <>
-          <InputForm onSubmit={handleAnalyze} isLoading={pageStatus === 'loading'} />
+          <InputForm onSubmit={handleAnalyze} isLoading={pageStatus === 'loading'} modes={reviewModes} />
           <HistoryPanel refreshTrigger={historyRefreshKey} />
           <ReviewModePanel modes={reviewModes} onModesChanged={handleModesChanged} />
 
