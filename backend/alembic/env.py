@@ -16,7 +16,9 @@ config.set_main_option(
     os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://pr_review:pr_review_pass@localhost:5432/pr_review",
-    ).replace("postgresql+asyncpg://", "postgresql://"),
+    )
+    .replace("postgresql+asyncpg://", "postgresql://")
+    .replace("postgresql+psycopg_async://", "postgresql://"),
 )
 
 if config.config_file_name is not None:

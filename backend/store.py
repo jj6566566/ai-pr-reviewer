@@ -1,7 +1,7 @@
 import json
-from typing import Optional
+from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.pr_analysis import CustomRule, PRAnalysis

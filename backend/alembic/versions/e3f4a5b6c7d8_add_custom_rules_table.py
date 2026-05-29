@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 revision: str = "e3f4a5b6c7d8"
-down_revision: Union[str, None] = "d2e3f4a5b6c7"
+down_revision: Union[str, None] = "c1e2f3a4b5c6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -109,7 +109,7 @@ def upgrade() -> None:
                 "name": "禁止硬编码密钥",
                 "description": "API 密钥、密码、Token 等敏感凭证不得硬编码",
                 "match_type": "regex",
-                "match_pattern": r"(api_key|secret|password|token)\s*=\s*['"][\w\-.]{8,}['"]",
+                "match_pattern": r'(api_key|secret|password|token)\s*=\s*["\'][\w\-.]{8,}["\']',
                 "match_scope": "added_lines",
                 "file_filter": None,
                 "severity": "critical",
