@@ -31,7 +31,7 @@ export default function PRList({ owner, repo, onSelectPR }: PRListProps) {
       setError('');
       try {
         const data = await fetchRepoPulls(owner, repo);
-        if (!cancelled) setPrs(data.filter((p: PRType) => p.state === 'open'));
+        if (!cancelled) setPrs(data);
       } catch {
         if (!cancelled) setError('加载 PR 列表失败');
       } finally {
@@ -62,7 +62,7 @@ export default function PRList({ owner, repo, onSelectPR }: PRListProps) {
   if (prs.length === 0) {
     return (
       <div className="rounded-lg border border-slate-700/50 bg-slate-800/40 p-4 text-center">
-        <p className="text-sm text-slate-500">该仓库暂无 Open PR</p>
+        <p className="text-sm text-slate-500">该仓库暂无 PR</p>
       </div>
     );
   }
@@ -85,6 +85,11 @@ export default function PRList({ owner, repo, onSelectPR }: PRListProps) {
           >
             <span className="text-xs text-slate-500 font-mono">#{pr.number}</span>
             <span className="flex-1 text-sm text-slate-300 truncate">{pr.title}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
+              pr.state === 'open' ? 'bg-green-950/50 text-green-400' : 'bg-slate-700/50 text-slate-500'
+            }`}>
+              {pr.state === 'open' ? 'Open' : 'Closed'}
+            </span>
             <span className="flex items-center gap-1 text-xs text-slate-600 flex-shrink-0">
               <Clock className="w-3 h-3" />
               {timeAgo(pr.created_at)}

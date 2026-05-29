@@ -83,7 +83,7 @@ async def list_pulls(
         "Accept": "application/vnd.github.v3+json",
     }
 
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls?state=open&sort=updated&per_page=30"
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls?state=all&sort=updated&per_page=30"
     async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
         resp = await client.get(url, headers=headers)
         if resp.status_code == 404:
