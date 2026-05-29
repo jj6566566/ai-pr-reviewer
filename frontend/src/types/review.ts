@@ -120,6 +120,32 @@ export interface AnalyzeResponse {
   estimated_review_minutes: number;
 }
 
+// ===== 批量分析类型 =====
+
+export interface BatchAnalyzeItem {
+  owner: string;
+  repo: string;
+  pr_number: number;
+}
+
+export interface BatchOverview {
+  total_prs: number;
+  avg_risk_score: number;
+  highest_risk_pr: {
+    pr_number: number;
+    pr_title: string;
+    risk_score: number;
+    risk_level: RiskLevel;
+  } | null;
+  risk_distribution: Record<string, number>;
+  top_risks: string[];
+}
+
+export interface BatchAnalyzeResponse {
+  results: AnalyzeResponse[];
+  overview: BatchOverview;
+}
+
 // ===== API 层适配类型 =====
 
 /** 分析成功结果（API 层包装） */

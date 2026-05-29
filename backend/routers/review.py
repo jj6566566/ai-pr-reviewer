@@ -6,7 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
-from backend.schemas.review import AnalyzeRequest, AnalyzeResponse, FileInfo, PRInfoResponse
+from backend.schemas.review import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    BatchAnalyzeRequest,
+    BatchAnalyzeResponse,
+    BatchOverview,
+    BatchRiskCard,
+    FileInfo,
+    PRInfoResponse,
+)
 from backend.services.github import github_service
 from backend.services.reviewer import reviewer_service
 from backend.store import get_analysis_by_id, get_recent_analyses, save_analysis
@@ -84,6 +93,91 @@ async def fetch_pr(owner: str, repo: str, pr_number: int):
             files=files_response,
             diff_content=pr_info.diff_content,
         ),
+    )
+
+
+@router.post("/batch", response_model=BatchAnalyzeResponse)
+async def batch_analyze(request: BatchAnalyzeRequest, db: AsyncSession = Depends(get_db)):
+    prs = request.prs
+    if len(prs) < 2 or len(prs) > 10:
+        raise HTTPException(status_code=400, detail="\u6279\u91cf\u5206\u6790\u9700\u8981 2-10 \u4e2a PR")
+
+    results: list[AnalyzeResponse] = []
+    for item in prs:
+        analyze_req = AnalyzeRequest(
+            owner=item.owner,
+            repo=item.repo,
+            pr_number=item.pr_number,
+        )
+        try:
+            response = reviewer_service.analyze(analyze_req)
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(
+                status_code=400,
+                detail="GitHub API \u9519\u8bef ({}): {}".format(item.owner, e.response.text),
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail="\u5206\u6790\u5931\u8d25 ({}): {}".format(item.owner, str(e)),
+            )
+
+        try:
+            await save_analysis(db, response)
+        except Exception as e:
+            logger.error("\u4fdd\u5b58\u5206\u6790\u7ed3\u679c\u5931\u8d25: %s", e)
+
+        results.append(response)
+
+    overview = _compute_batch_overview(results)
+    return BatchAnalyzeResponse(results=results, overview=overview)
+
+
+SEVERITY_WEIGHT = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+
+
+def _compute_batch_overview(results: list) -> BatchOverview:
+    total_prs = len(results)
+
+    avg_risk_score = sum(r.risk_score for r in results) / total_prs if total_prs > 0 else 0.0
+    avg_risk_score = round(avg_risk_score, 2)
+
+    highest = max(results, key=lambda r: r.risk_score)
+    highest_risk_pr = BatchRiskCard(
+        pr_number=highest.pr_info.number,
+        title=highest.pr_info.title,
+        risk_score=highest.risk_score,
+        risk_level=highest.risk_level,
+    )
+
+    risk_distribution: dict = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for r in results:
+        level = r.risk_level
+        if level in risk_distribution:
+            risk_distribution[level] += 1
+
+    all_risks: list[tuple] = []
+    for r in results:
+        for item in r.risk_items:
+            all_risks.append((item.description, SEVERITY_WEIGHT.get(item.severity, 0)))
+
+    all_risks.sort(key=lambda x: x[1], reverse=True)
+
+    seen: set = set()
+    top_risks: list[str] = []
+    for desc, _ in all_risks:
+        if desc not in seen:
+            seen.add(desc)
+            top_risks.append(desc)
+        if len(top_risks) >= 5:
+            break
+
+    return BatchOverview(
+        total_prs=total_prs,
+        avg_risk_score=avg_risk_score,
+        highest_risk_pr=highest_risk_pr,
+        risk_distribution=risk_distribution,
+        top_risks=top_risks,
     )
 
 
