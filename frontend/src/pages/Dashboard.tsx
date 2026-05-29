@@ -50,12 +50,9 @@ import type {
   BatchAnalyzeItem,
   BatchAnalyzeResponse,
   RiskLevel,
-  CrossPRDuplicateResult,
   RiskSeverity,
   RuleMatch,
   TrendResponse,
-  TrendDataPoint,
-  TrendSummary,
 } from '../types/review';
 import {
   RISK_SEVERITY_CONFIG,

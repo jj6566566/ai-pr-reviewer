@@ -21,6 +21,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u);
       setIsLoading(false);
     });
+
+    const handleAuthChanged = () => {
+      getCurrentUser().then((u) => {
+        setUser(u);
+      });
+    };
+    window.addEventListener('auth-changed', handleAuthChanged);
+    return () => window.removeEventListener('auth-changed', handleAuthChanged);
   }, []);
 
   const login = useCallback(async () => {

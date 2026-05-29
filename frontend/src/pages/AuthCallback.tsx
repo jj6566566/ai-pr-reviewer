@@ -9,7 +9,8 @@ export default function AuthCallback() {
     const token = params.get('token');
     if (token) {
       localStorage.setItem('pr_review_token', token);
-      navigate('/dashboard', { replace: true });
+      window.dispatchEvent(new Event('auth-changed'));
+      navigate('/', { replace: true });
     } else {
       navigate('/', { replace: true });
     }
