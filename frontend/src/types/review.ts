@@ -356,3 +356,28 @@ export interface CustomRule {
   created_at: string | null;
   updated_at: string | null;
 }
+
+export interface TrendDataPoint {
+  day: string | null;
+  pr_count: number;
+  avg_risk_score: number;
+  total_files_changed: number;
+  total_additions: number;
+  total_deletions: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+}
+
+export interface TrendSummary {
+  total_prs: number;
+  avg_risk_score: number;
+  trend_direction: 'improving' | 'worsening' | 'stable';
+  most_common_severity: string;
+}
+
+export interface TrendResponse {
+  data_points: TrendDataPoint[];
+  summary: TrendSummary;
+}

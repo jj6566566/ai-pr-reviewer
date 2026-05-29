@@ -170,3 +170,28 @@ class CustomRuleResponse(BaseModel):
     is_preset: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class TrendDataPoint(BaseModel):
+    day: Optional[str] = None
+    pr_count: int = 0
+    avg_risk_score: float = 0.0
+    total_files_changed: int = 0
+    total_additions: int = 0
+    total_deletions: int = 0
+    critical_count: int = 0
+    high_count: int = 0
+    medium_count: int = 0
+    low_count: int = 0
+
+
+class TrendSummary(BaseModel):
+    total_prs: int = 0
+    avg_risk_score: float = 0.0
+    trend_direction: str = "stable"
+    most_common_severity: str = "low"
+
+
+class TrendResponse(BaseModel):
+    data_points: list[TrendDataPoint] = []
+    summary: TrendSummary
