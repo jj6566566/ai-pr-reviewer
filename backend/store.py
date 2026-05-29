@@ -105,10 +105,14 @@ async def create_rule(db: AsyncSession, data: CustomRuleCreate) -> CustomRule:
 
 async def update_rule(db: AsyncSession, rule_id: int, data: CustomRuleUpdate) -> Optional[CustomRule]:
     rule = await get_rule_by_id(db, rule_id)
-    if rule is None or rule.is_preset:
+    if rule is None:
         return None
     update_data = {}
-    for field in ("name", "description", "match_type", "match_pattern", "match_scope", "file_filter", "severity", "suggestion", "is_enabled"):
+    if rule.is_preset:
+        allowed = {"is_enabled"}
+    else:
+        allowed = {"name", "description", "match_type", "match_pattern", "match_scope", "file_filter", "severity", "suggestion", "is_enabled"}
+    for field in allowed:
         val = getattr(data, field, None)
         if val is not None:
             update_data[field] = val
