@@ -1,8 +1,8 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.pr_analysis import CustomRule, PRAnalysis
@@ -135,46 +135,49 @@ async def delete_rule(db: AsyncSession, rule_id: int) -> bool:
 
 
 async def get_trends(db: AsyncSession, days: int, repo_owner: Optional[str] = None, repo_name: Optional[str] = None) -> List[dict]:
-    cutoff = func.now() - timedelta(days=days)
-
-    stmt = (
-        select(
-            func.date_trunc("day", PRAnalysis.created_at).label("day"),
-            func.count(PRAnalysis.id).label("pr_count"),
-            func.avg(PRAnalysis.risk_score).label("avg_risk_score"),
-            func.sum(PRAnalysis.files_changed).label("total_files_changed"),
-            func.sum(PRAnalysis.additions).label("total_additions"),
-            func.sum(PRAnalysis.deletions).label("total_deletions"),
-            func.count().filter(PRAnalysis.risk_level == "critical").label("critical_count"),
-            func.count().filter(PRAnalysis.risk_level == "high").label("high_count"),
-            func.count().filter(PRAnalysis.risk_level == "medium").label("medium_count"),
-            func.count().filter(PRAnalysis.risk_level == "low").label("low_count"),
-        )
-        .where(PRAnalysis.created_at >= cutoff)
-        .group_by(func.date_trunc("day", PRAnalysis.created_at))
-        .order_by(func.date_trunc("day", PRAnalysis.created_at).asc())
-    )
-
+    params: dict = {"days_param": str(days)}
+    clauses: list[str] = ["created_at >= NOW() - (:days_param || ' days')::INTERVAL"]
     if repo_owner:
-        stmt = stmt.where(PRAnalysis.repo_owner == repo_owner)
+        clauses.append("repo_owner = :owner")
+        params["owner"] = repo_owner
     if repo_name:
-        stmt = stmt.where(PRAnalysis.repo_name == repo_name)
+        clauses.append("repo_name = :repo")
+        params["repo"] = repo_name
+    where_sql = " AND ".join(clauses)
 
-    result = await db.execute(stmt)
+    sql = text("""
+        SELECT
+            DATE_TRUNC('day', created_at) AS day,
+            COUNT(*) AS pr_count,
+            COALESCE(AVG(risk_score), 0) AS avg_risk_score,
+            COALESCE(SUM(files_changed), 0) AS total_files_changed,
+            COALESCE(SUM(additions), 0) AS total_additions,
+            COALESCE(SUM(deletions), 0) AS total_deletions,
+            COALESCE(SUM(CASE WHEN risk_level = 'critical' THEN 1 ELSE 0 END), 0) AS critical_count,
+            COALESCE(SUM(CASE WHEN risk_level = 'high' THEN 1 ELSE 0 END), 0) AS high_count,
+            COALESCE(SUM(CASE WHEN risk_level = 'medium' THEN 1 ELSE 0 END), 0) AS medium_count,
+            COALESCE(SUM(CASE WHEN risk_level = 'low' THEN 1 ELSE 0 END), 0) AS low_count
+        FROM pr_analyses
+        WHERE """ + where_sql + """
+        GROUP BY DATE_TRUNC('day', created_at)
+        ORDER BY day ASC
+    """)
+
+    result = await db.execute(sql, params)
     rows = result.all()
 
     return [
         {
-            "day": row.day.isoformat() if row.day else None,
+            "day": row.day.isoformat() if hasattr(row, 'day') and row.day else None,
             "pr_count": row.pr_count,
-            "avg_risk_score": round(float(row.avg_risk_score) if row.avg_risk_score else 0, 1),
-            "total_files_changed": row.total_files_changed or 0,
-            "total_additions": row.total_additions or 0,
-            "total_deletions": row.total_deletions or 0,
-            "critical_count": row.critical_count or 0,
-            "high_count": row.high_count or 0,
-            "medium_count": row.medium_count or 0,
-            "low_count": row.low_count or 0,
+            "avg_risk_score": round(float(row.avg_risk_score), 1),
+            "total_files_changed": row.total_files_changed,
+            "total_additions": row.total_additions,
+            "total_deletions": row.total_deletions,
+            "critical_count": row.critical_count,
+            "high_count": row.high_count,
+            "medium_count": row.medium_count,
+            "low_count": row.low_count,
         }
         for row in rows
     ]
