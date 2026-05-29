@@ -86,7 +86,9 @@ class ReviewerService:
                 files=files_response,
                 diff_content=pr_info.diff_content,
             ),
-            summary=analysis.get("summary", ""),
+            summary=self._append_analysis_scope(
+                analysis.get("summary", ""), diff_ctx
+            ),
             risk_items=[RiskItem(**r) for r in analysis.get("risk_items", [])],
             suggestions=[Suggestion(**s) for s in analysis.get("suggestions", [])],
             risk_score=risk_result.score,
@@ -139,12 +141,21 @@ class ReviewerService:
                 diff_parts.append(patch)
                 diff_parts.append("")
 
-        # 低优文件只在 diff_ctx 的 priority_files 中可能包含截断版，
-        # 此处已在 _smart_truncate 阶段处理好
+        # 低优文件截断 diff 也拼入，LLM 至少能看到关键 hunk
+        if diff_ctx.low_priority_files:
+            diff_parts.append("# 以下为低优文件（截断版 diff，供参考）\n")
+            for f in diff_ctx.low_priority_files:
+                fname = f.get("filename", "")
+                patch = f.get("patch", "")
+                if patch:
+                    diff_parts.append("--- a/{}".format(fname))
+                    diff_parts.append("+++ b/{}".format(fname))
+                    diff_parts.append(patch)
+                    diff_parts.append("")
 
         diff = "\n".join(diff_parts)
         # 兜底截断：极特殊情况下的二次保护
-        max_diff_chars = 12000
+        max_diff_chars = 30000
         if len(diff) > max_diff_chars:
             diff = diff[:max_diff_chars] + "\n... (diff 超出最大长度，已截断，共 {} 字符)".format(
                 len(diff)
@@ -189,11 +200,11 @@ class ReviewerService:
         调用 GitHub API 获取 base 分支的完整文件内容，
         提取变更行前后各 50 行的上下文代码。
 
-        所有文件上下文总计不超过 6000 字符，
+        所有文件上下文总计不超过 15000 字符，
         超过时优先保留有变更的行前后 50 行代码。
         如果获取文件内容失败，静默跳过（not critical）。
         """
-        MAX_CONTEXT_CHARS = 6000
+        MAX_CONTEXT_CHARS = 15000
         CONTEXT_LINES = 50
 
         parts: List[str] = []
@@ -355,6 +366,30 @@ class ReviewerService:
                 "suggestions": [],
             }
 
+
+    @staticmethod
+    def _append_analysis_scope(summary: str, diff_ctx: DiffContext) -> str:
+        """在 LLM 生成的摘要末尾追加分析范围说明，帮助用户了解 AI 覆盖了什么。"""
+        deep_count = len(diff_ctx.priority_files)
+        shallow_count = len(diff_ctx.low_priority_files)
+        filtered_count = len(diff_ctx.filtered_files)
+
+        if shallow_count == 0 and filtered_count == 0:
+            return summary
+
+        lines = [summary, "", "---", "**分析范围**:"]
+        lines.append(
+            "- 深度分析（完整代码+上下文）: {} 个文件".format(deep_count)
+        )
+        if shallow_count:
+            lines.append(
+                "- 基本分析（截断 diff）: {} 个文件（建议人工复查）".format(shallow_count)
+            )
+        if filtered_count:
+            lines.append(
+                "- 自动跳过: {} 个文件（lock/二进制/生成代码）".format(filtered_count)
+            )
+        return "\n".join(lines)
 
     @staticmethod
     def _format_review_comment(response: AnalyzeResponse) -> str:
