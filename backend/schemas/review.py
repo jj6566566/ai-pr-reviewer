@@ -51,3 +51,9 @@ class AnalyzeResponse(BaseModel):
     summary: str = ""
     risk_items: list[RiskItem] = []
     suggestions: list[Suggestion] = []
+    risk_score: int = 0
+    """综合风险评分 0-100。"""
+    risk_level: str = "low"
+    """风险等级：low / medium / high / critical。"""
+    estimated_review_minutes: int = 0
+    """估算审查时间（分钟）。"""

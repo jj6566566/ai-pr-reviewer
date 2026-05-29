@@ -99,6 +99,9 @@ export interface SuggestionItem {
   code_snippet: string;
 }
 
+/** 风险等级 */
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
 /** 后端完整分析响应 */
 export interface AnalyzeResponse {
   /** PR 基本信息 */
@@ -109,6 +112,12 @@ export interface AnalyzeResponse {
   risk_items: RiskItem[];
   /** 改进建议列表 */
   suggestions: SuggestionItem[];
+  /** 综合风险分（0-100） */
+  risk_score: number;
+  /** 风险等级 */
+  risk_level: RiskLevel;
+  /** 估算审查时间（分钟） */
+  estimated_review_minutes: number;
 }
 
 // ===== API 层适配类型 =====
@@ -201,4 +210,35 @@ export const SEVERITY_ORDER: Record<RiskSeverity, number> = {
   high: 1,
   medium: 2,
   low: 3,
+};
+
+/** 风险评分展示配置（颜色 + 中文标签） */
+export const RISK_LEVEL_SCORE_CONFIG: Record<
+  RiskLevel,
+  { label: string; textClass: string; bgClass: string; ringClass: string }
+> = {
+  low: {
+    label: '低风险',
+    textClass: 'text-emerald-400',
+    bgClass: 'bg-emerald-500/10',
+    ringClass: 'ring-emerald-500/30',
+  },
+  medium: {
+    label: '中风险',
+    textClass: 'text-yellow-400',
+    bgClass: 'bg-yellow-500/10',
+    ringClass: 'ring-yellow-500/30',
+  },
+  high: {
+    label: '高风险',
+    textClass: 'text-orange-400',
+    bgClass: 'bg-orange-500/10',
+    ringClass: 'ring-orange-500/30',
+  },
+  critical: {
+    label: '严重风险',
+    textClass: 'text-red-400',
+    bgClass: 'bg-red-500/10',
+    ringClass: 'ring-red-500/30',
+  },
 };

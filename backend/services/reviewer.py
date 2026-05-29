@@ -2,8 +2,10 @@ import json
 from typing import Optional
 
 from backend.schemas.review import AnalyzeRequest, AnalyzeResponse, FileInfo, PRInfoResponse, RiskItem, Suggestion
+from backend.services.diff_processor import DiffContext, diff_processor
 from backend.services.github import PRInfo, github_service
 from backend.services.llm import LLMClient, llm_client
+from backend.services.risk_scorer import RiskResult, risk_scorer
 
 SYSTEM_PROMPT = """你是一位资深代码评审专家。请对提供的 Pull Request 进行专业分析，输出 JSON 格式结果。
 
@@ -39,7 +41,22 @@ class ReviewerService:
             pr_number=request.pr_number,
         )
 
-        analysis = self._call_llm(pr_info)
+        # 智能 Diff 预处理
+        diff_ctx = diff_processor.process(
+            diff_content=pr_info.diff_content,
+            files=pr_info.files,
+        )
+
+        # LLM 分析（传入结构化上下文）
+        analysis = self._call_llm(pr_info, diff_ctx)
+
+        # 风险评分计算
+        risk_result = risk_scorer.score(
+            risk_items=analysis.get("risk_items", []),
+            files_changed=pr_info.files_changed,
+            additions=pr_info.additions,
+            deletions=pr_info.deletions,
+        )
 
         files_response = [
             FileInfo(
@@ -71,41 +88,94 @@ class ReviewerService:
             summary=analysis.get("summary", ""),
             risk_items=[RiskItem(**r) for r in analysis.get("risk_items", [])],
             suggestions=[Suggestion(**s) for s in analysis.get("suggestions", [])],
+            risk_score=risk_result.score,
+            risk_level=risk_result.level,
+            estimated_review_minutes=risk_result.estimated_minutes,
         )
 
-    def _call_llm(self, pr_info: PRInfo) -> dict:
-        user_message = self._build_user_message(pr_info)
+    def _call_llm(self, pr_info: PRInfo, diff_ctx: DiffContext) -> dict:
+        user_message = self._build_user_message(pr_info, diff_ctx)
 
         raw = self.llm.chat(system_prompt=SYSTEM_PROMPT, user_message=user_message)
 
         return self._parse_response(raw)
 
-    def _build_user_message(self, pr_info: PRInfo) -> str:
+    def _build_user_message(self, pr_info: PRInfo, diff_ctx: DiffContext) -> str:
+        # 文件变更统计摘要（由 DiffProcessor 生成）
+        summary_lines = [diff_ctx.summary_text]
+
+        # 变更类型标注
+        if diff_ctx.change_types:
+            change_labels = {
+                "db_schema": "数据库 Schema 变更",
+                "config": "配置变更",
+                "auth": "权限/认证变更",
+                "auth_breaking": "权限/认证破坏性变更",
+                "api_breaking": "API 破坏性变更（函数签名变化）",
+            }
+            ct_list = ", ".join(change_labels.get(ct, ct) for ct in diff_ctx.change_types)
+            summary_lines.append("变更类型: {}".format(ct_list))
+
+        # 构建精简的文件列表（仅高优文件）
         file_list = "\n".join(
-            f"  [{f.status}] {f.filename} (+{f.additions}/-{f.deletions})"
-            for f in pr_info.files
+            "  [{status}] {filename} (+{additions}/-{deletions})".format(
+                status=f.get("status", "?"),
+                filename=f.get("filename", "?"),
+                additions=f.get("additions", 0),
+                deletions=f.get("deletions", 0),
+            )
+            for f in diff_ctx.priority_files
         )
 
-        diff = pr_info.diff_content
-        max_diff_chars = 8000
+        # 构建智能 diff：高优文件完整 diff + 低优文件截断 diff
+        diff_parts = []
+        for f in diff_ctx.priority_files:
+            fname = f.get("filename", "")
+            patch = f.get("patch", "")
+            if patch:
+                diff_parts.append("--- a/{}".format(fname))
+                diff_parts.append("+++ b/{}".format(fname))
+                diff_parts.append(patch)
+                diff_parts.append("")
+
+        # 低优文件只在 diff_ctx 的 priority_files 中可能包含截断版，
+        # 此处已在 _smart_truncate 阶段处理好
+
+        diff = "\n".join(diff_parts)
+        # 兜底截断：极特殊情况下的二次保护
+        max_diff_chars = 12000
         if len(diff) > max_diff_chars:
-            diff = diff[:max_diff_chars] + "\n... (diff 已截断，共 {} 字符)".format(
-                len(pr_info.diff_content)
+            diff = diff[:max_diff_chars] + "\n... (diff 超出最大长度，已截断，共 {} 字符)".format(
+                len(diff)
             )
 
-        return f"""请分析以下 Pull Request：
+        return """请分析以下 Pull Request：
 
-标题: {pr_info.title}
-描述: {pr_info.description or "（无描述）"}
-作者: {pr_info.author}
-分支: {pr_info.head_branch} -> {pr_info.base_branch}
-文件数: {pr_info.files_changed} | +{pr_info.additions}/-{pr_info.deletions}
+标题: {title}
+描述: {description}
+作者: {author}
+分支: {head_branch} -> {base_branch}
+文件数: {files_changed} | +{additions}/-{deletions}
 
-改动的文件:
+{summary}
+
+核心文件:
 {file_list}
 
 代码变更 (diff):
-{diff}"""
+{diff}""".format(
+            title=pr_info.title,
+            description=pr_info.description or "（无描述）",
+            author=pr_info.author,
+            head_branch=pr_info.head_branch,
+            base_branch=pr_info.base_branch,
+            files_changed=pr_info.files_changed,
+            additions=pr_info.additions,
+            deletions=pr_info.deletions,
+            summary="\n".join(summary_lines),
+            file_list=file_list,
+            diff=diff,
+        )
 
     def _parse_response(self, raw: str) -> dict:
         text = raw.strip()
