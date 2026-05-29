@@ -1500,6 +1500,9 @@ export default function Dashboard() {
   const [selectedRepo, setSelectedRepo] = useState<{ owner: string; repo: string } | null>(null);
   const [selectedPR, setSelectedPR] = useState<{ owner: string; repo: string; number: number } | null>(null);
 
+  const [batchSelectedRepo, setBatchSelectedRepo] = useState<{ owner: string; repo: string } | null>(null);
+  const [batchSelectedPRs, setBatchSelectedPRs] = useState<Set<number>>(new Set());
+
   useEffect(() => {
     if (pageStatus === 'success') {
       setHistoryRefreshKey((prev) => prev + 1);
@@ -1675,6 +1678,63 @@ export default function Dashboard() {
         <>
           {batchStatus === 'idle' && (
             <>
+              {isAuthenticated && (
+                <div className="w-full max-w-2xl mx-auto mb-4 space-y-3">
+                  <RepoSelector onSelect={(owner, repo) => {
+                    setBatchSelectedRepo({ owner, repo });
+                    setBatchSelectedPRs(new Set());
+                  }} />
+                  {batchSelectedRepo && (
+                    <>
+                      <PRList
+                        owner={batchSelectedRepo.owner}
+                        repo={batchSelectedRepo.repo}
+                        multiSelect
+                        selected={batchSelectedPRs}
+                        onTogglePR={(owner, repo, number) => {
+                          setBatchSelectedPRs((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(number)) {
+                              next.delete(number);
+                            } else {
+                              next.add(number);
+                            }
+                            return next;
+                          });
+                        }}
+                        onSelectPR={() => {}}
+                      />
+                      {batchSelectedPRs.size > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const items = Array.from(batchSelectedPRs).map((num) => ({
+                              owner: batchSelectedRepo.owner,
+                              repo: batchSelectedRepo.repo,
+                              pr_number: num,
+                            }));
+                            handleBatchAnalyze(items);
+                          }}
+                          className="w-full py-2.5 rounded-lg text-sm font-medium
+                                     bg-violet-600 hover:bg-violet-500 text-white
+                                     transition-colors"
+                        >
+                          批量分析 {batchSelectedPRs.size} 个 PR
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="w-full max-w-2xl mx-auto mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-slate-700/50" />
+                  <span className="text-xs text-slate-500 flex-shrink-0">或粘贴 URL</span>
+                  <div className="flex-1 h-px bg-slate-700/50" />
+                </div>
+              </div>
+
               <div className="w-full max-w-2xl mx-auto mb-6">
                 <UrlParser
                   onConfirm={(items) => {
@@ -1686,14 +1746,6 @@ export default function Dashboard() {
                     handleBatchAnalyze(mapped);
                   }}
                 />
-              </div>
-
-              <div className="w-full max-w-2xl mx-auto mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-slate-700/50" />
-                  <span className="text-xs text-slate-500 flex-shrink-0">或</span>
-                  <div className="flex-1 h-px bg-slate-700/50" />
-                </div>
               </div>
 
               <details className="w-full max-w-2xl mx-auto mb-4">
