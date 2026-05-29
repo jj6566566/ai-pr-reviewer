@@ -176,6 +176,14 @@ class GitHubService:
         lowered = path.lower()
         return any(lowered.endswith(ext) for ext in BINARY_EXTENSIONS)
 
+    def post_pr_review(self, owner: str, repo: str, pr_number: int, body: str) -> dict:
+        resp = self.client.post(
+            f"/repos/{owner}/{repo}/issues/{pr_number}/comments",
+            json={"body": body},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def close(self):
         if self._client:
             self._client.close()

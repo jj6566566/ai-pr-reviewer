@@ -3,7 +3,13 @@
  * @description AI PR Review API 调用封装
  */
 
-import type { AnalyzeRequest, AnalyzeResponse, AnalyzeResult } from '../types/review';
+import type {
+  AnalyzeRequest,
+  AnalyzeResponse,
+  AnalyzeResult,
+  HistoryItem,
+  HistoryDetail,
+} from '../types/review';
 
 /** API 基础路径（通过 Vite proxy 转发到后端） */
 const API_BASE = '/api';
@@ -52,4 +58,34 @@ export async function analyzePR(params: AnalyzeRequest): Promise<AnalyzeResult> 
     success: true,
     data,
   };
+}
+
+/**
+ * 获取历史记录列表
+ * @param limit - 返回条数上限，默认 20
+ * @returns 历史记录列表
+ */
+export async function fetchHistory(limit = 20): Promise<HistoryItem[]> {
+  const response = await fetch(`${API_BASE}/review/history?limit=${limit}`);
+
+  if (!response.ok) {
+    throw new Error(`获取历史记录失败 (HTTP ${response.status})`);
+  }
+
+  return response.json();
+}
+
+/**
+ * 获取历史记录详情
+ * @param id - 历史记录 ID
+ * @returns 完整历史记录详情（含分析结果）
+ */
+export async function fetchHistoryDetail(id: number): Promise<HistoryDetail> {
+  const response = await fetch(`${API_BASE}/review/history/${id}`);
+
+  if (!response.ok) {
+    throw new Error(`获取历史记录详情失败 (HTTP ${response.status})`);
+  }
+
+  return response.json();
 }
