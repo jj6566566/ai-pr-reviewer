@@ -20,8 +20,15 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowLeft,
+  X,
+  Plus,
+  BarChart3,
+  Activity,
+  Gauge,
+  Zap,
+  Layers,
 } from 'lucide-react';
-import { analyzePR, fetchHistory, fetchHistoryDetail } from '../api/review';
+import { analyzePR, fetchHistory, fetchHistoryDetail, analyzeBatch } from '../api/review';
 import type {
   AnalyzeResponse,
   RiskItem,
@@ -29,6 +36,9 @@ import type {
   SuggestionCategory,
   HistoryItem,
   HistoryDetail,
+  BatchAnalyzeItem,
+  BatchAnalyzeResponse,
+  RiskLevel,
 } from '../types/review';
 import {
   RISK_SEVERITY_CONFIG,
@@ -40,6 +50,8 @@ import {
 // ===== 页面状态类型 =====
 
 type PageStatus = 'idle' | 'loading' | 'success' | 'error';
+
+type DashboardMode = 'single' | 'batch';
 
 // ===== 子组件 =====
 
@@ -161,6 +173,166 @@ function InputForm({ onSubmit, isLoading }: InputFormProps) {
           <>
             <Search className="w-4 h-4" />
             开始分析
+          </>
+        )}
+      </button>
+    </form>
+  );
+}
+
+interface BatchInputFormProps {
+  onSubmit: (prs: BatchAnalyzeItem[]) => void;
+  isLoading: boolean;
+}
+
+function BatchInputForm({ onSubmit, isLoading }: BatchInputFormProps) {
+  const [prs, setPrs] = useState<BatchAnalyzeItem[]>([
+    { owner: '', repo: '', pr_number: 0 },
+    { owner: '', repo: '', pr_number: 0 },
+  ]);
+
+  const handleFieldChange = (
+    index: number,
+    field: keyof BatchAnalyzeItem,
+    value: string,
+  ) => {
+    setPrs((prev) => {
+      const next = [...prev];
+      if (field === 'pr_number') {
+        next[index] = { ...next[index], [field]: parseInt(value, 10) || 0 };
+      } else {
+        next[index] = { ...next[index], [field]: value };
+      }
+      return next;
+    });
+  };
+
+  const handleRemove = (index: number) => {
+    if (prs.length <= 2) return;
+    setPrs((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAdd = () => {
+    if (prs.length >= 10) return;
+    setPrs((prev) => [...prev, { owner: '', repo: '', pr_number: 0 }]);
+  };
+
+  const isValid = prs.every(
+    (p) =>
+      p.owner.trim() !== '' &&
+      p.repo.trim() !== '' &&
+      p.pr_number > 0,
+  );
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!isValid || prs.length < 2) return;
+    const cleaned = prs.map((p) => ({
+      owner: p.owner.trim(),
+      repo: p.repo.trim(),
+      pr_number: p.pr_number,
+    }));
+    onSubmit(cleaned);
+  };
+
+  const inputBaseClass =
+    'w-full bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 outline-none transition-all duration-200 focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/30 focus:bg-slate-800/80';
+
+  return (
+    <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto mb-10">
+      <div className="flex items-center gap-2 mb-4">
+        <Layers className="w-5 h-5 text-violet-400" />
+        <h2 className="text-lg font-semibold text-slate-200">批量分析</h2>
+        <span className="text-xs text-slate-500 ml-auto">{prs.length}/10 PR</span>
+      </div>
+
+      <div className="space-y-2 mb-4">
+        {prs.map((pr, idx) => (
+          <div
+            key={idx}
+            className="rounded-lg border border-slate-700/50 bg-slate-800/40 p-3 transition-colors hover:border-slate-600/50"
+          >
+            <div className="flex items-center gap-1 mb-1">
+              <span className="text-[11px] font-semibold text-slate-500 min-w-[28px]">
+                PR {idx + 1}
+              </span>
+              {prs.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => handleRemove(idx)}
+                  className="ml-auto p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+                  title="移除"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  placeholder="owner"
+                  value={pr.owner}
+                  onChange={(e) => handleFieldChange(idx, 'owner', e.target.value)}
+                  disabled={isLoading}
+                  className={inputBaseClass}
+                />
+              </div>
+              <div className="flex-1">
+                <input
+                  type="text"
+                  placeholder="repo"
+                  value={pr.repo}
+                  onChange={(e) => handleFieldChange(idx, 'repo', e.target.value)}
+                  disabled={isLoading}
+                  className={inputBaseClass}
+                />
+              </div>
+              <div className="w-28 sm:w-32">
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="#"
+                  value={pr.pr_number > 0 ? pr.pr_number : ''}
+                  onChange={(e) => handleFieldChange(idx, 'pr_number', e.target.value)}
+                  disabled={isLoading}
+                  className={inputBaseClass}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={handleAdd}
+        disabled={prs.length >= 10 || isLoading}
+        className="w-full flex items-center justify-center gap-1.5 rounded-lg py-2 border border-dashed border-slate-600/50 text-slate-400 text-sm hover:border-sky-500/40 hover:text-sky-400 transition-all duration-200 mb-3 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <Plus className="w-4 h-4" />
+        添加 PR
+      </button>
+
+      <button
+        type="submit"
+        disabled={!isValid || prs.length < 2 || isLoading}
+        className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all duration-200
+          bg-gradient-to-r from-sky-500 to-violet-500 text-white
+          hover:from-sky-400 hover:to-violet-400
+          active:scale-[0.98]
+          shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30
+          disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100"
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            批量分析中...
+          </>
+        ) : (
+          <>
+            <BarChart3 className="w-4 h-4" />
+            开始批量分析
           </>
         )}
       </button>
@@ -528,6 +700,284 @@ function ResultSection({ data, onReset }: ResultSectionProps) {
   );
 }
 
+function getRiskLevelColor(level: string): string {
+  switch (level) {
+    case 'critical':
+      return 'bg-red-400';
+    case 'high':
+      return 'bg-orange-400';
+    case 'medium':
+      return 'bg-yellow-400';
+    case 'low':
+      return 'bg-green-400';
+    default:
+      return 'bg-slate-400';
+  }
+}
+
+function getRiskLevelTextColor(level: string): string {
+  switch (level) {
+    case 'critical':
+      return 'text-red-400';
+    case 'high':
+      return 'text-orange-400';
+    case 'medium':
+      return 'text-yellow-400';
+    case 'low':
+      return 'text-green-400';
+    default:
+      return 'text-slate-400';
+  }
+}
+
+function getRiskLevelFromScore(score: number): RiskLevel {
+  if (score >= 75) return 'critical';
+  if (score >= 50) return 'high';
+  if (score >= 25) return 'medium';
+  return 'low';
+}
+
+interface BatchResultViewProps {
+  data: BatchAnalyzeResponse;
+  onReset: () => void;
+}
+
+function BatchResultView({ data, onReset }: BatchResultViewProps) {
+  const { overview, results } = data;
+  const [expandedPrs, setExpandedPrs] = useState<Set<number>>(new Set());
+
+  const toggleExpand = (idx: number) => {
+    setExpandedPrs((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  };
+
+  const avgRiskLevel = getRiskLevelFromScore(overview.avg_risk_score);
+  const avgScoreConfig = RISK_LEVEL_SCORE_CONFIG[avgRiskLevel];
+
+  const sortedResults = useMemo(
+    () => [...results].sort((a, b) => b.risk_score - a.risk_score),
+    [results],
+  );
+
+  const maxScore = 100;
+
+  const distributionEntries = useMemo(() => {
+    const total = overview.total_prs || 1;
+    return Object.entries(overview.risk_distribution)
+      .sort(([, a], [, b]) => b - a)
+      .map(([level, count]) => ({ level, count, pct: Math.round((count / total) * 100) }));
+  }, [overview.risk_distribution, overview.total_prs]);
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      <div className="flex items-center justify-center gap-2 mb-6 text-sm text-emerald-400">
+        <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center">
+          <span className="text-[10px] font-bold">&#10003;</span>
+        </div>
+        批量分析完成（共 {results.length} 个 PR）
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Gauge className="w-4 h-4 text-sky-400" />
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+              平均风险分
+            </span>
+          </div>
+          <div className="flex items-baseline gap-1 mb-1">
+            <span className={`text-3xl font-extrabold ${avgScoreConfig.textClass}`}>
+              {Math.round(overview.avg_risk_score)}
+            </span>
+            <span className="text-sm text-slate-500">/100</span>
+          </div>
+          <span className={`text-xs font-semibold ${avgScoreConfig.textClass}`}>
+            {avgScoreConfig.label}
+          </span>
+        </div>
+
+        <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="w-4 h-4 text-orange-400" />
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+              最高风险 PR
+            </span>
+          </div>
+          {overview.highest_risk_pr ? (
+            <>
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-lg font-bold text-slate-200">
+                  #{overview.highest_risk_pr.pr_number}
+                </span>
+                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${RISK_LEVEL_SCORE_CONFIG[overview.highest_risk_pr.risk_level]?.bgClass ?? 'bg-slate-800'} ${getRiskLevelTextColor(overview.highest_risk_pr.risk_level)}`}>
+                  {RISK_LEVEL_SCORE_CONFIG[overview.highest_risk_pr.risk_level]?.label ?? overview.highest_risk_pr.risk_level}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 truncate">
+                {overview.highest_risk_pr.pr_title}
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">--</p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="w-4 h-4 text-violet-400" />
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+              风险分布
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {distributionEntries.length > 0 ? (
+              distributionEntries.map(({ level, count, pct }) => (
+                <div key={level} className="flex items-center gap-1">
+                  <span className={`w-2.5 h-2.5 rounded-sm ${getRiskLevelColor(level)}`} />
+                  <span className="text-xs text-slate-300 font-medium">{count}</span>
+                  <span className="text-[10px] text-slate-500">{pct}%</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-slate-500">--</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-6 mb-6">
+        <h2 className="text-lg font-semibold text-slate-200 mb-5 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-sky-400" />
+          风险评分对比
+        </h2>
+
+        <div className="space-y-3">
+          {sortedResults.map((result) => {
+            const scoreConfig = RISK_LEVEL_SCORE_CONFIG[result.risk_level];
+            const barWidth = Math.max((result.risk_score / maxScore) * 100, 2);
+            return (
+              <div key={result.pr_info.number} className="flex items-center gap-3">
+                <div className="flex items-center gap-2 w-48 sm:w-56 flex-shrink-0 min-w-0">
+                  <span className="text-xs font-mono font-semibold text-slate-500 whitespace-nowrap">
+                    #{result.pr_info.number}
+                  </span>
+                  <span className="text-xs text-slate-400 truncate">
+                    {result.pr_info.title}
+                  </span>
+                </div>
+                <div className="flex-1 h-6 bg-slate-700/40 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ease-out ${getRiskLevelColor(result.risk_level)}`}
+                    style={{ width: `${barWidth}%` }}
+                  />
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 w-20 justify-end">
+                  <span className={`text-sm font-bold ${scoreConfig.textClass}`}>
+                    {result.risk_score}
+                  </span>
+                  <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${scoreConfig.bgClass} ${scoreConfig.textClass}`}>
+                    {scoreConfig.label}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {overview.top_risks.length > 0 && (
+        <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-6 mb-6">
+          <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-orange-400" />
+            常见风险项
+          </h2>
+          <div className="space-y-2">
+            {overview.top_risks.map((risk, idx) => (
+              <div
+                key={idx}
+                className="flex items-start gap-2.5 rounded-lg bg-slate-800/50 border border-slate-700/40 px-3 py-2.5"
+              >
+                <span className="text-[11px] font-bold text-slate-600 min-w-[18px] mt-0.5">
+                  {idx + 1}.
+                </span>
+                <span className="text-sm text-slate-300 leading-relaxed">{risk}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm p-6 mb-6">
+        <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+          <GitPullRequest className="w-5 h-5 text-violet-400" />
+          各 PR 分析结果
+        </h2>
+
+        <div className="space-y-3">
+          {sortedResults.map((result, idx) => {
+            const scoreConfig = RISK_LEVEL_SCORE_CONFIG[result.risk_level];
+            const isExpanded = expandedPrs.has(idx);
+            return (
+              <div
+                key={result.pr_info.number}
+                className="rounded-lg border border-slate-700/40 bg-slate-800/50 overflow-hidden"
+              >
+                <button
+                  onClick={() => toggleExpand(idx)}
+                  className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-800/70 transition-colors"
+                >
+                  <span className="text-xs font-mono font-semibold text-slate-500 whitespace-nowrap">
+                    #{result.pr_info.number}
+                  </span>
+                  <span className="flex-1 text-sm font-medium text-slate-200 truncate">
+                    {result.pr_info.title}
+                  </span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${scoreConfig.bgClass} ${scoreConfig.textClass}`}>
+                    {result.risk_score}
+                  </span>
+                  <span className={`text-[11px] font-semibold ${scoreConfig.textClass}`}>
+                    {scoreConfig.label}
+                  </span>
+                  {isExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-500" />
+                  )}
+                </button>
+
+                {isExpanded && (
+                  <div className="border-t border-slate-700/40 px-4 pb-4 pt-3">
+                    <SummaryCard data={result} />
+                    <RiskList riskItems={result.risk_items} />
+                    <SuggestionList suggestions={result.suggestions} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex justify-center mt-4 mb-10">
+        <button
+          onClick={onReset}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600/50 text-slate-300 text-sm hover:bg-slate-700 transition-colors"
+        >
+          <Search className="w-3.5 h-3.5" />
+          重新批量分析
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ===== 历史记录辅助函数 =====
 
 /** 格式化 ISO 日期为中文显示 */
@@ -772,6 +1222,7 @@ function HistoryPanel({ refreshTrigger }: HistoryPanelProps) {
 // ===== 主 Dashboard 组件 =====
 
 export default function Dashboard() {
+  const [mode, setMode] = useState<DashboardMode>('single');
   const [pageStatus, setPageStatus] = useState<PageStatus>('idle');
   const [resultData, setResultData] = useState<AnalyzeResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
@@ -782,13 +1233,16 @@ export default function Dashboard() {
   } | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
+  const [batchStatus, setBatchStatus] = useState<PageStatus>('idle');
+  const [batchResult, setBatchResult] = useState<BatchAnalyzeResponse | null>(null);
+  const [batchError, setBatchError] = useState('');
+
   useEffect(() => {
     if (pageStatus === 'success') {
       setHistoryRefreshKey((prev) => prev + 1);
     }
   }, [pageStatus]);
 
-  /** 发起分析 */
   const handleAnalyze = async (owner: string, repo: string, prNumber: number) => {
     setPageStatus('loading');
     setErrorMessage('');
@@ -817,14 +1271,12 @@ export default function Dashboard() {
     }
   };
 
-  /** 重试 */
   const handleRetry = () => {
     if (lastParams) {
       handleAnalyze(lastParams.owner, lastParams.repo, lastParams.prNumber);
     }
   };
 
-  /** 重置到初始状态 */
   const handleReset = () => {
     setPageStatus('idle');
     setResultData(null);
@@ -832,19 +1284,103 @@ export default function Dashboard() {
     setLastParams(null);
   };
 
+  const handleBatchAnalyze = async (prs: BatchAnalyzeItem[]) => {
+    setBatchStatus('loading');
+    setBatchError('');
+    setBatchResult(null);
+
+    try {
+      const response = await analyzeBatch(prs);
+      setBatchResult(response);
+      setBatchStatus('success');
+    } catch (err: unknown) {
+      const message =
+        err instanceof TypeError
+          ? '网络连接失败，请确认后端服务是否已启动'
+          : err instanceof Error
+            ? err.message
+            : '批量分析请求发生未知异常';
+      setBatchError(message);
+      setBatchStatus('error');
+    }
+  };
+
+  const handleBatchReset = () => {
+    setBatchStatus('idle');
+    setBatchResult(null);
+    setBatchError('');
+  };
+
+  const handleModeChange = (newMode: DashboardMode) => {
+    setMode(newMode);
+    if (newMode === 'single') {
+      handleBatchReset();
+    } else {
+      handleReset();
+    }
+  };
+
   return (
     <div className="min-h-screen px-4 pb-16">
       <BrandHeader />
-      <InputForm onSubmit={handleAnalyze} isLoading={pageStatus === 'loading'} />
 
-      <HistoryPanel refreshTrigger={historyRefreshKey} />
+      <div className="flex justify-center mb-8">
+        <div className="inline-flex rounded-lg bg-slate-800/60 border border-slate-700/50 p-1">
+          <button
+            onClick={() => handleModeChange('single')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+              mode === 'single'
+                ? 'bg-slate-700 text-slate-200 shadow-sm'
+                : 'text-slate-400 hover:text-slate-300'
+            }`}
+          >
+            <GitPullRequest className="w-4 h-4" />
+            单个 PR
+          </button>
+          <button
+            onClick={() => handleModeChange('batch')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+              mode === 'batch'
+                ? 'bg-slate-700 text-slate-200 shadow-sm'
+                : 'text-slate-400 hover:text-slate-300'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            批量对比
+          </button>
+        </div>
+      </div>
 
-      {pageStatus === 'loading' && <LoadingState />}
-      {pageStatus === 'error' && (
-        <ErrorState error={errorMessage} onRetry={handleRetry} />
+      {mode === 'single' && (
+        <>
+          <InputForm onSubmit={handleAnalyze} isLoading={pageStatus === 'loading'} />
+          <HistoryPanel refreshTrigger={historyRefreshKey} />
+
+          {pageStatus === 'loading' && <LoadingState />}
+          {pageStatus === 'error' && (
+            <ErrorState error={errorMessage} onRetry={handleRetry} />
+          )}
+          {pageStatus === 'success' && resultData && (
+            <ResultSection data={resultData} onReset={handleReset} />
+          )}
+        </>
       )}
-      {pageStatus === 'success' && resultData && (
-        <ResultSection data={resultData} onReset={handleReset} />
+
+      {mode === 'batch' && (
+        <>
+          <BatchInputForm onSubmit={handleBatchAnalyze} isLoading={batchStatus === 'loading'} />
+
+          {batchStatus === 'loading' && <LoadingState />}
+          {batchStatus === 'error' && (
+            <ErrorState
+              error={batchError}
+              onRetry={() => {}}
+            />
+          )}
+          {batchStatus === 'success' && batchResult && (
+            <BatchResultView data={batchResult} onReset={handleBatchReset} />
+          )}
+        </>
       )}
     </div>
   );

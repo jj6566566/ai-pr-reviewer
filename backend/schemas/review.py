@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -57,3 +59,33 @@ class AnalyzeResponse(BaseModel):
     """风险等级：low / medium / high / critical。"""
     estimated_review_minutes: int = 0
     """估算审查时间（分钟）。"""
+
+
+class BatchAnalyzeItem(BaseModel):
+    owner: str
+    repo: str
+    pr_number: int
+
+
+class BatchAnalyzeRequest(BaseModel):
+    prs: list[BatchAnalyzeItem]
+
+
+class BatchRiskCard(BaseModel):
+    pr_number: int
+    title: str
+    risk_score: int
+    risk_level: str
+
+
+class BatchOverview(BaseModel):
+    total_prs: int
+    avg_risk_score: float
+    highest_risk_pr: Optional[BatchRiskCard]
+    risk_distribution: dict
+    top_risks: list[str]
+
+
+class BatchAnalyzeResponse(BaseModel):
+    results: list[AnalyzeResponse]
+    overview: BatchOverview

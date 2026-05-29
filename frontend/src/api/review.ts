@@ -9,6 +9,8 @@ import type {
   AnalyzeResult,
   HistoryItem,
   HistoryDetail,
+  BatchAnalyzeItem,
+  BatchAnalyzeResponse,
 } from '../types/review';
 
 /** API 基础路径（通过 Vite proxy 转发到后端） */
@@ -87,5 +89,15 @@ export async function fetchHistoryDetail(id: number): Promise<HistoryDetail> {
     throw new Error(`获取历史记录详情失败 (HTTP ${response.status})`);
   }
 
+  return response.json();
+}
+
+export async function analyzeBatch(prs: BatchAnalyzeItem[]): Promise<BatchAnalyzeResponse> {
+  const response = await fetch(`${API_BASE}/review/batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prs }),
+  });
+  if (!response.ok) throw new Error(`批量分析失败 (HTTP ${response.status})`);
   return response.json();
 }
