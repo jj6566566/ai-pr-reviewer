@@ -345,6 +345,20 @@ export default function AnalyzePage() {
       .finally(() => setLoading(false))
   }, [searchParams])
 
+  useEffect(() => {
+    const ownerParam = searchParams.get("owner")
+    const repoParam = searchParams.get("repo")
+    const prParam = searchParams.get("pr")
+    if (!ownerParam || !repoParam) return
+
+    setOwner(ownerParam)
+    setRepo(repoParam)
+    if (prParam) {
+      const prNum = parseInt(prParam, 10)
+      if (!isNaN(prNum)) setPrNumber(prNum)
+    }
+  }, [searchParams])
+
   const canAnalyze = (owner && repo && prNumber !== null) || Boolean(manualPR)
   const canBatchAnalyze = owner && repo && selectedPRs.length >= 2 && selectedPRs.length <= 10
 
