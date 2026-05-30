@@ -43,6 +43,8 @@ import RepoSelector from "@/components/RepoSelector"
 import PRList from "@/components/PRList"
 import ReviewChat from "@/components/ReviewChat"
 import DiffViewer from "@/components/DiffViewer"
+import IntentCheckCard from "@/components/IntentCheckCard"
+import PRReview from "@/pages/PRReview"
 
 const severityIcons: Record<string, typeof Bug> = {
   critical: Bug,
@@ -927,6 +929,12 @@ export default function AnalyzePage() {
             )}
           </div>
 
+          {result.intent_check && (
+            <div className="mt-4">
+              <IntentCheckCard data={result.intent_check} />
+            </div>
+          )}
+
           <div className="bg-[#131829] border border-[#1e2440] rounded-xl overflow-hidden shadow-lg shadow-black/20">
             <div className="flex border-b border-[#1e2440] bg-[#0a0e1a]/50">
               {[
@@ -1308,7 +1316,9 @@ export default function AnalyzePage() {
                               <p className="text-sm text-[#e4e8f1] leading-relaxed">{prResult.summary}</p>
                             </div>
                           )}
-
+                          {prResult.intent_check && (
+                            <IntentCheckCard data={prResult.intent_check} />
+                          )}
                           {prResult.risk_items.length > 0 && (
                             <div>
                               <div className="flex items-center justify-between mb-2">
@@ -1361,6 +1371,10 @@ export default function AnalyzePage() {
                 })}
               </>
             )}
+          </div>
+
+          <div className="mt-8 pt-8 border-t border-[#1e2440]">
+            <PRReview />
           </div>
         </>
       )}

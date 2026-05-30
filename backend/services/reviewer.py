@@ -2,7 +2,7 @@ import json
 import re
 from typing import List, Optional, Tuple
 
-from backend.schemas.review import AnalyzeRequest, AnalyzeResponse, FileInfo, PRInfoResponse, RiskItem, Suggestion
+from backend.schemas.review import AnalyzeRequest, AnalyzeResponse, Discrepancy, FileInfo, IntentCheck, PRInfoResponse, RiskItem, Suggestion
 from backend.services.diff_processor import DiffContext, diff_processor
 from backend.services.github import PRInfo, github_service
 from backend.services.llm import LLMClient, llm_client
@@ -23,12 +23,23 @@ SYSTEM_PROMPT = """你是一位资深代码评审专家。请对提供的 Pull R
    - description: 建议描述
    - file: 相关文件
    - code_snippet: 建议的代码片段（可选）
+4. intent_check: PR 意图与实际变更一致性分析
+   - declared_intent: 从 PR 标题和描述推断的开发者意图（一句话）
+   - actual_scope: 实际代码变更的实际影响范围（一句话）
+   - consistency_score: 一致性评分 0-100（100=完全一致）
+   - verdict: "match" | "minor_deviation" | "major_deviation"
+   - discrepancies: 不一致之处列表，可为空数组
+     - type: "scope_drift"(范围漂移) | "hidden_breaking"(隐含破坏性改动) | "missing_desc"(描述遗漏) | "unrelated_file"(无关文件)
+     - description: 具体描述不一致之处
+     - file: 涉及的文件名（如有）
+     - severity: "high" | "medium" | "low"
 
 要求：
 - 只输出 JSON，不要任何其他文字
 - risk_items 只列出真正有风险的问题，空列表优于误报
 - suggestions 要具体、可操作，不是泛泛而谈
-- 每个维度最多 5 条"""
+- 每个维度最多 5 条
+- intent_check 要客观分析，即使一致性高也要如实评分"""
 
 
 class ReviewerService:
@@ -114,6 +125,15 @@ class ReviewerService:
             for f in pr_info.files
         ]
 
+        ic_raw = analysis.get("intent_check") or {}
+        intent_check = IntentCheck(
+            declared_intent=ic_raw.get("declared_intent", ""),
+            actual_scope=ic_raw.get("actual_scope", ""),
+            consistency_score=ic_raw.get("consistency_score", 100),
+            verdict=ic_raw.get("verdict", "match"),
+            discrepancies=[Discrepancy(**d) for d in ic_raw.get("discrepancies", [])],
+        ) if ic_raw else None
+
         return AnalyzeResponse(
             pr_info=PRInfoResponse(
                 owner=pr_info.owner,
@@ -136,6 +156,7 @@ class ReviewerService:
             risk_score=risk_result.score,
             risk_level=risk_result.level,
             estimated_review_minutes=risk_result.estimated_minutes,
+            intent_check=intent_check,
         )
 
     def _calculate_confidence(self, risk_item: dict, pr_info: PRInfo) -> float:

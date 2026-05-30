@@ -29,6 +29,7 @@ import { RISK_SEVERITY_CONFIG, RISK_LEVEL_CONFIG, SEVERITY_ORDER } from "@/types
 import { fetchHistory, fetchHistoryDetail, submitFeedback } from "@/api/review"
 import ReviewChat from "@/components/ReviewChat"
 import DiffViewer from "@/components/DiffViewer"
+import IntentCheckCard from "@/components/IntentCheckCard"
 
 const riskLevelOptions = [
   { value: "all", label: "全部等级" },
@@ -280,7 +281,9 @@ export default function PRReview() {
                             </p>
                           </div>
                         )}
-
+                        {detail.intent_check && (
+                          <IntentCheckCard data={detail.intent_check} />
+                        )}
                         {detail.risk_items.length > 0 && (
                           <div>
                             <h5 className="text-xs font-semibold text-[#ef4444] mb-2">

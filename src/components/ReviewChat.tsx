@@ -159,28 +159,13 @@ export default function ReviewChat({
 
   /* ---- refs ---- */
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const chatContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<(() => void) | null>(null)
-  const shouldAutoScroll = useRef(true)
 
-  /* ---- scroll to bottom only when user is at bottom ---- */
+  /* ---- scroll to bottom when messages change ---- */
   useEffect(() => {
-    if (shouldAutoScroll.current && chatContainerRef.current) {
-      requestAnimationFrame(() => {
-        if (chatContainerRef.current) {
-          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
-        }
-      })
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
-
-  const handleChatScroll = () => {
-    const el = chatContainerRef.current
-    if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60
-    shouldAutoScroll.current = atBottom
-  }
 
   /* ---- focus input when opening ---- */
   useEffect(() => {
@@ -219,7 +204,6 @@ export default function ReviewChat({
     const aiPlaceholder: ChatMessage = { role: "ai", content: "" }
 
     setMessages((prev) => [...prev, userMsg, aiPlaceholder])
-    shouldAutoScroll.current = true
     setIsStreaming(true)
 
     abortRef.current = askAI(
@@ -315,7 +299,7 @@ export default function ReviewChat({
       {isOpen && (
         <div className="border-t border-[#1e2440] animate-slide-up">
           {/* ---------- messages area ---------- */}
-          <div ref={chatContainerRef} onScroll={handleChatScroll} className="h-[340px] overflow-y-auto px-4 py-4 space-y-4">
+          <div className="h-[340px] overflow-y-auto px-4 py-4 space-y-4">
             {!hasMessages && !error && (
               <div className="flex flex-col items-center justify-center h-full text-center px-6">
                 <Bot size={40} className="text-[#06d6a0]/30 mb-4" />

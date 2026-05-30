@@ -523,6 +523,7 @@ async def get_history_detail(
         "feedback": feedback,
         "confidence_scores": confidence_scores,
         "diff_content": a.diff_content,
+        "intent_check": json.loads(a.intent_check) if a.intent_check else None,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
     }

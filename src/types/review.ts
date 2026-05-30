@@ -73,6 +73,22 @@ export interface AnalyzeResponse {
   risk_level: RiskLevel
   estimated_review_minutes: number
   analysis_id?: number
+  intent_check?: IntentCheck | null
+}
+
+export interface IntentCheck {
+  declared_intent: string
+  actual_scope: string
+  consistency_score: number
+  verdict: "match" | "minor_deviation" | "major_deviation"
+  discrepancies: Discrepancy[]
+}
+
+export interface Discrepancy {
+  type: "scope_drift" | "hidden_breaking" | "missing_desc" | "unrelated_file"
+  description: string
+  file: string
+  severity: "high" | "medium" | "low"
 }
 
 export interface AnalyzeSuccessResponse {
@@ -114,6 +130,7 @@ export interface HistoryDetail extends HistoryItem {
   feedback?: Record<string, { verdict: string; timestamp?: string | null }> | null
   confidence_scores?: Record<string, number> | null
   diff_content?: string | null
+  intent_check?: IntentCheck | null
 }
 
 export interface CustomRule {
