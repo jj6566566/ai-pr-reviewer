@@ -7,6 +7,7 @@ class AnalyzeRequest(BaseModel):
     owner: str = Field(..., description="仓库所有者")
     repo: str = Field(..., description="仓库名称")
     pr_number: int = Field(..., description="PR 编号")
+    post_comment: bool = Field(False, description="分析完成后是否自动发布评论到 PR")
 
 
 class FileInfo(BaseModel):
@@ -82,6 +83,7 @@ class BatchAnalyzeItem(BaseModel):
 
 class BatchAnalyzeRequest(BaseModel):
     prs: list[BatchAnalyzeItem]
+    post_comment: bool = Field(False, description="分析完成后是否自动发布评论到 PR")
 
 
 class BatchRiskCard(BaseModel):

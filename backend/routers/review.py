@@ -96,17 +96,18 @@ async def analyze_pr(request: AnalyzeRequest, user: User = Depends(require_user)
     except Exception as e:
         logger.error("\u4fdd\u5b58\u5206\u6790\u7ed3\u679c\u5931\u8d25: %s", e)
 
-    try:
-        comment_body = reviewer_service._format_review_comment(response)
-        github_service.post_pr_review(
-            owner=request.owner,
-            repo=request.repo,
-            pr_number=request.pr_number,
-            body=comment_body,
-            token=token,
-        )
-    except Exception as e:
-        logger.error("\u53d1\u5e03 PR \u8bc4\u8bba\u5931\u8d25: %s", e)
+    if request.post_comment:
+        try:
+            comment_body = reviewer_service._format_review_comment(response)
+            github_service.post_pr_review(
+                owner=request.owner,
+                repo=request.repo,
+                pr_number=request.pr_number,
+                body=comment_body,
+                token=token,
+            )
+        except Exception as e:
+            logger.error("\u53d1\u5e03 PR \u8bc4\u8bba\u5931\u8d25: %s", e)
 
     return response
 
@@ -183,19 +184,20 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, user: User = Depend
                 logger.error("保存分析结果失败 (PR #%s): %s", r.pr_info.number, e)
 
         # 为每个 PR 单独发布评论（相互独立，一个失败不影响其他）
-        for r in results:
-            try:
-                comment_body = reviewer_service._format_review_comment(r)
-                github_service.post_pr_review(
-                    owner=r.pr_info.owner,
-                    repo=r.pr_info.repo,
-                    pr_number=r.pr_info.number,
-                    body=comment_body,
-                    token=token,
-                )
-                logger.info("成功发布 PR 评论 (PR #%s)", r.pr_info.number)
-            except Exception as e:
-                logger.error("发布 PR 评论失败 (PR #%s): %s", r.pr_info.number, e)
+        if request.post_comment:
+            for r in results:
+                try:
+                    comment_body = reviewer_service._format_review_comment(r)
+                    github_service.post_pr_review(
+                        owner=r.pr_info.owner,
+                        repo=r.pr_info.repo,
+                        pr_number=r.pr_info.number,
+                        body=comment_body,
+                        token=token,
+                    )
+                    logger.info("成功发布 PR 评论 (PR #%s)", r.pr_info.number)
+                except Exception as e:
+                    logger.error("发布 PR 评论失败 (PR #%s): %s", r.pr_info.number, e)
 
     async def generate():
         total = len(prs)
@@ -520,6 +522,7 @@ async def get_history_detail(
         "status": a.status,
         "feedback": feedback,
         "confidence_scores": confidence_scores,
+        "diff_content": a.diff_content,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
     }

@@ -50,6 +50,7 @@ async def save_analysis(db: AsyncSession, response: AnalyzeResponse) -> PRAnalys
         risk_level=response.risk_level,
         estimated_review_minutes=response.estimated_review_minutes,
         status="completed",
+        diff_content=pr_info.diff_content,
     )
     db.add(analysis)
     await db.commit()
@@ -94,6 +95,7 @@ def save_analysis_sync(response: AnalyzeResponse) -> PRAnalysis:
         risk_level=response.risk_level,
         estimated_review_minutes=response.estimated_review_minutes,
         status="completed",
+        diff_content=pr_info.diff_content,
     )
 
     with SyncSession() as session:

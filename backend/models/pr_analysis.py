@@ -41,6 +41,7 @@ class PRAnalysis(Base):
     status: Mapped[str] = mapped_column(String(50), default="pending")
     feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     confidence_scores: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    diff_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
