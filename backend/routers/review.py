@@ -107,9 +107,32 @@ async def analyze_pr(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)
 @router.post("/analyze-stream")
 async def analyze_pr_stream(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)):
     async def generate():
+        response_data = None
         try:
             for event in reviewer_service.analyze_stream(request):
+                if event["event"] == "complete":
+                    response_data = event["data"]
                 yield "event: {}\ndata: {}\n\n".format(event["event"], json.dumps(event["data"], ensure_ascii=False))
+            
+            if response_data:
+                response = AnalyzeResponse(**response_data)
+                try:
+                    await save_analysis(db, response)
+                except Exception as e:
+                    logger.error("\u4fdd\u5b58\u5206\u6790\u7ed3\u679c\u5931\u8d25: %s", e)
+                
+                try:
+                    comment_body = reviewer_service._format_review_comment(response)
+                    github_service.post_pr_review(
+                        owner=request.owner,
+                        repo=request.repo,
+                        pr_number=request.pr_number,
+                        body=comment_body,
+                    )
+                    yield "event: comment_posted\ndata: {}\n\n".format(json.dumps({"success": True}))
+                except Exception as e:
+                    logger.error("\u53d1\u5e03 PR \u8bc4\u8bba\u5931\u8d25: %s", e)
+                    yield "event: comment_posted\ndata: {}\n\n".format(json.dumps({"success": False, "error": str(e)}))
         except httpx.HTTPStatusError as e:
             yield "event: error\ndata: {}\n\n".format(json.dumps({"error": "GitHub API \u9519\u8bef: {}".format(e.response.text)}))
         except Exception as e:
@@ -173,6 +196,24 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, db: AsyncSession = 
                 await save_analysis(db, r)
         except Exception as e:
             logger.error("批量保存分析结果失败: %s", e)
+
+        try:
+            for r in results:
+                comment_body = reviewer_service._format_review_comment(r)
+                github_service.post_pr_review(
+                    owner=r.owner,
+                    repo=r.repo,
+                    pr_number=r.pr_number,
+                    body=comment_body,
+                )
+                yield "event: batch_comment_posted\ndata: {}\n\n".format(
+                    json.dumps({"pr_number": r.pr_number, "success": True})
+                )
+        except Exception as e:
+            logger.error("批量发布 PR 评论失败: %s", e)
+            yield "event: batch_comment_posted\ndata: {}\n\n".format(
+                json.dumps({"success": False, "error": str(e)})
+            )
 
         overview = _compute_batch_overview(results)
         dup_result = None
