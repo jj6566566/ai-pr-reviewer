@@ -79,7 +79,7 @@ async def callback(
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
     del _OAUTH_STATES[state]
 
-    frontend_base = "http://localhost:5173"
+    frontend_base = "http://localhost:5174"
 
     # --- 换取 access_token --------------------------------------------------
     try:

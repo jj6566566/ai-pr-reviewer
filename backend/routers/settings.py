@@ -20,9 +20,13 @@ class SettingsUpdate(BaseModel):
 @router.get("/status")
 async def get_status(db: AsyncSession = Depends(get_db)):
     stored = await get_all_settings(db)
+    deepseek_key = stored.get("deepseek_api_key", settings.DEEPSEEK_API_KEY)
+    github_token = stored.get("github_token", settings.GITHUB_TOKEN)
     return {
-        "deepseek_api_key": stored.get("deepseek_api_key", settings.DEEPSEEK_API_KEY),
-        "github_token": stored.get("github_token", settings.GITHUB_TOKEN),
+        "deepseek_configured": bool(deepseek_key),
+        "github_configured": bool(github_token),
+        "deepseek_api_key": deepseek_key,
+        "github_token": github_token,
         "deepseek_base_url": stored.get("deepseek_base_url", settings.DEEPSEEK_BASE_URL),
     }
 
