@@ -41,17 +41,50 @@ class ReviewerService:
             repo=request.repo,
             pr_number=request.pr_number,
         )
-
-        # 智能 Diff 预处理
         diff_ctx = diff_processor.process(
             diff_content=pr_info.diff_content,
             files=pr_info.files,
         )
-
-        # LLM 分析（传入结构化上下文）
         analysis = self._call_llm(pr_info, diff_ctx)
+        return self._build_response(pr_info, diff_ctx, analysis)
 
-        # 风险评分计算
+    def analyze_stream(self, request: AnalyzeRequest):
+        pr_info = github_service.get_pr_info(
+            owner=request.owner,
+            repo=request.repo,
+            pr_number=request.pr_number,
+        )
+        diff_ctx = diff_processor.process(
+            diff_content=pr_info.diff_content,
+            files=pr_info.files,
+        )
+        yield {"event": "progress", "data": {"stage": "fetched", "files_changed": pr_info.files_changed, "additions": pr_info.additions, "deletions": pr_info.deletions}}
+
+        user_message = self._build_user_message(pr_info, diff_ctx)
+        buffer = ""
+        for chunk in self.llm.chat_stream(system_prompt=SYSTEM_PROMPT, user_message=user_message):
+            buffer += chunk
+            yield {"event": "token", "data": chunk}
+
+        analysis = self._parse_response(buffer)
+        response = self._build_response(pr_info, diff_ctx, analysis)
+        yield {"event": "complete", "data": response.model_dump(mode="json")}
+
+    def _build_response(self, pr_info: PRInfo, diff_ctx: DiffContext, analysis: dict) -> AnalyzeResponse:
+        risk_items_raw = analysis.get("risk_items", [])
+        suggestions_raw = analysis.get("suggestions", [])
+
+        validated_risks = []
+        for idx, r in enumerate(risk_items_raw):
+            r["confidence"] = self._calculate_confidence(r, pr_info)
+            r["is_false_positive"] = self._detect_false_positive(r, pr_info)
+            validated_risks.append(RiskItem(**r))
+
+        validated_suggestions = []
+        for s in suggestions_raw:
+            s["confidence"] = 0.75
+            validated_suggestions.append(Suggestion(**s))
+
         risk_result = risk_scorer.score(
             risk_items=analysis.get("risk_items", []),
             files_changed=pr_info.files_changed,
@@ -86,28 +119,66 @@ class ReviewerService:
                 files=files_response,
                 diff_content=pr_info.diff_content,
             ),
-            summary=self._append_analysis_scope(
-                analysis.get("summary", ""), diff_ctx
-            ),
-            risk_items=[RiskItem(**r) for r in analysis.get("risk_items", [])],
-            suggestions=[Suggestion(**s) for s in analysis.get("suggestions", [])],
+            summary=self._append_analysis_scope(analysis.get("summary", ""), diff_ctx),
+            risk_items=validated_risks,
+            suggestions=validated_suggestions,
             risk_score=risk_result.score,
             risk_level=risk_result.level,
             estimated_review_minutes=risk_result.estimated_minutes,
         )
 
+    def _calculate_confidence(self, risk_item: dict, pr_info: PRInfo) -> float:
+        confidence = 0.7
+        file = risk_item.get("file", "")
+        desc = risk_item.get("description", "")
+        severity = risk_item.get("severity", "medium")
+
+        file_matches = [f for f in pr_info.files if file in f.filename]
+        if file_matches:
+            confidence += 0.15
+        else:
+            confidence -= 0.1
+
+        if severity in ("critical", "high"):
+            if len(desc) > 20:
+                confidence += 0.05
+        else:
+            if len(desc) < 10:
+                confidence -= 0.1
+
+        security_keywords = ["sql", "injection", "xss", "csrf", "token", "password", "secret", "auth", "bypass", "overflow", "race", "condition"]
+        if any(kw in desc.lower() for kw in security_keywords):
+            confidence += 0.05
+
+        return round(min(max(confidence, 0.0), 1.0), 2)
+
+    def _detect_false_positive(self, risk_item: dict, pr_info: PRInfo) -> bool:
+        file = risk_item.get("file", "")
+        desc = risk_item.get("description", "")
+
+        file_matches = [f for f in pr_info.files if file in f.filename]
+        if not file_matches:
+            return True
+
+        if len(desc) < 5:
+            return True
+
+        vague_patterns = ["可以考虑", "建议检查", "可能存在问题", "需要注意", "recommend checking", "potential issue", "might be"]
+        is_too_vague = any(p in desc for p in vague_patterns)
+        has_specific = len(desc) > 30
+        if is_too_vague and not has_specific:
+            return True
+
+        return False
+
     def _call_llm(self, pr_info: PRInfo, diff_ctx: DiffContext) -> dict:
         user_message = self._build_user_message(pr_info, diff_ctx)
-
         raw = self.llm.chat(system_prompt=SYSTEM_PROMPT, user_message=user_message)
-
         return self._parse_response(raw)
 
     def _build_user_message(self, pr_info: PRInfo, diff_ctx: DiffContext) -> str:
-        # 文件变更统计摘要（由 DiffProcessor 生成）
         summary_lines = [diff_ctx.summary_text]
 
-        # 变更类型标注
         if diff_ctx.change_types:
             change_labels = {
                 "db_schema": "数据库 Schema 变更",
@@ -119,7 +190,6 @@ class ReviewerService:
             ct_list = ", ".join(change_labels.get(ct, ct) for ct in diff_ctx.change_types)
             summary_lines.append("变更类型: {}".format(ct_list))
 
-        # 构建精简的文件列表（仅高优文件）
         file_list = "\n".join(
             "  [{status}] {filename} (+{additions}/-{deletions})".format(
                 status=f.get("status", "?"),
@@ -130,7 +200,6 @@ class ReviewerService:
             for f in diff_ctx.priority_files
         )
 
-        # 构建智能 diff：高优文件完整 diff + 低优文件截断 diff
         diff_parts = []
         for f in diff_ctx.priority_files:
             fname = f.get("filename", "")
@@ -141,7 +210,6 @@ class ReviewerService:
                 diff_parts.append(patch)
                 diff_parts.append("")
 
-        # 低优文件截断 diff 也拼入，LLM 至少能看到关键 hunk
         if diff_ctx.low_priority_files:
             diff_parts.append("# 以下为低优文件（截断版 diff，供参考）\n")
             for f in diff_ctx.low_priority_files:
@@ -154,14 +222,10 @@ class ReviewerService:
                     diff_parts.append("")
 
         diff = "\n".join(diff_parts)
-        # 兜底截断：极特殊情况下的二次保护
         max_diff_chars = 30000
         if len(diff) > max_diff_chars:
-            diff = diff[:max_diff_chars] + "\n... (diff 超出最大长度，已截断，共 {} 字符)".format(
-                len(diff)
-            )
+            diff = diff[:max_diff_chars] + "\n... (diff 超出最大长度，已截断，共 {} 字符)".format(len(diff))
 
-        # ---- M4: 构建关键文件完整上下文章节 ----
         file_context_section = self._build_file_context_section(pr_info, diff_ctx)
 
         return """请分析以下 Pull Request：
@@ -194,29 +258,15 @@ class ReviewerService:
         )
 
     def _build_file_context_section(self, pr_info: PRInfo, diff_ctx: DiffContext) -> str:
-        """构建关键文件完整上下文章节。
-
-        对于 diff_ctx.priority_files 中的每个高优文件，
-        调用 GitHub API 获取 base 分支的完整文件内容，
-        提取变更行前后各 50 行的上下文代码。
-
-        所有文件上下文总计不超过 15000 字符，
-        超过时优先保留有变更的行前后 50 行代码。
-        如果获取文件内容失败，静默跳过（not critical）。
-        """
         MAX_CONTEXT_CHARS = 15000
         CONTEXT_LINES = 50
-
         parts: List[str] = []
         total_chars = 0
-
         for f in diff_ctx.priority_files:
             fname = f.get("filename", "")
             patch = f.get("patch", "")
             if not fname or not patch:
                 continue
-
-            # 调用 GitHub API 获取 base 分支完整文件内容
             full_content = github_service.get_file_contents(
                 owner=pr_info.owner,
                 repo=pr_info.repo,
@@ -225,92 +275,45 @@ class ReviewerService:
             )
             if not full_content:
                 continue
-
-            # 提取变更行前后各 CONTEXT_LINES 行的上下文
             context = self._extract_context(full_content, patch, CONTEXT_LINES)
-
             header = "#### 文件: {}".format(fname)
             footer = "\n以上为该文件的完整代码（含变更上下文）。请结合完整代码理解下文的 diff 变更。"
             block = "```\n完整代码（供理解改动上下文）:\n{}\n```{}".format(context, footer)
             candidate = "{}\n{}".format(header, block)
-
             if total_chars + len(candidate) > MAX_CONTEXT_CHARS:
-                # 配额不足，尝试截断当前文件的内容
                 remaining = MAX_CONTEXT_CHARS - total_chars
-                min_overhead = len(header) + len(
-                    "```\n完整代码（供理解改动上下文）:\n\n... (上下文已截断)\n```{}".format(footer)
-                )
+                min_overhead = len(header) + len("```\n完整代码（供理解改动上下文）:\n\n... (上下文已截断)\n```{}".format(footer))
                 if remaining < min_overhead:
                     break
-
-                available_for_code = (
-                    remaining
-                    - len(header)
-                    - len("```\n完整代码（供理解改动上下文）:\n\n```{}".format(footer))
-                    - len("\n... (上下文已截断)")
-                )
+                available_for_code = remaining - len(header) - len("```\n完整代码（供理解改动上下文）:\n\n```{}".format(footer)) - len("\n... (上下文已截断)")
                 if available_for_code > 0:
                     truncated_context = context[:available_for_code] + "\n... (上下文已截断)"
-                    block = "```\n完整代码（供理解改动上下文）:\n{}\n```{}".format(
-                        truncated_context, footer
-                    )
+                    block = "```\n完整代码（供理解改动上下文）:\n{}\n```{}".format(truncated_context, footer)
                     parts.append("{}\n{}".format(header, block))
                 break
-
             parts.append(candidate)
             total_chars += len(candidate)
-
         if not parts:
             return ""
-
         return "### 关键文件完整上下文\n\n{}\n\n".format("\n".join(parts))
 
     @staticmethod
     def _extract_context(file_content: str, patch: str, context_lines: int = 50) -> str:
-        """从完整文件内容中提取变更行附近上下文。
-
-        解析 unified diff 的 hunk header（@@ -old,count +new,count @@），
-        确定变更在原文件中的行号范围，提取前后各 context_lines 行。
-        多个 hunk 的范围自动合并去重。
-
-        Parameters
-        ----------
-        file_content : str
-            文件的完整内容。
-        patch : str
-            统一 diff 格式的 patch 文本。
-        context_lines : int
-            变更行前后各保留的行数。
-
-        Returns
-        -------
-        str
-            带行号标注的上下文字符串。
-        """
         if not file_content:
             return ""
-
         file_lines = file_content.split("\n")
         total_lines = len(file_lines)
-
-        # 解析 hunk header，提取变更在原文件中的行号范围
-        hunk_pattern = re.compile(
-            r"^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@"
-        )
+        hunk_pattern = re.compile(r"^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")
         ranges: List[Tuple[int, int]] = []
         for match in hunk_pattern.finditer(patch):
             old_start = int(match.group(1))
             old_count = int(match.group(2)) if match.group(2) else 1
             ranges.append((old_start, old_start + old_count - 1))
-
         if not ranges:
-            # 无法解析行号，回退：返回前 200 行
             return "\n".join(
                 "{:>6}| {}".format(i + 1, line)
                 for i, line in enumerate(file_lines[:200])
             )
-
-        # 合并重叠 / 相邻范围
         ranges.sort()
         merged: List[Tuple[int, int]] = []
         for r in ranges:
@@ -318,33 +321,25 @@ class ReviewerService:
                 merged[-1] = (merged[-1][0], max(merged[-1][1], r[1]))
             else:
                 merged.append(r)
-
-        # 扩展每个范围 ±context_lines
         expanded: List[Tuple[int, int]] = []
         for start, end in merged:
             ctx_start = max(1, start - context_lines)
             ctx_end = min(total_lines, end + context_lines)
             expanded.append((ctx_start, ctx_end))
-
-        # 再次合并可能因扩展而重叠的范围
         final_ranges: List[Tuple[int, int]] = []
         for r in expanded:
             if final_ranges and r[0] <= final_ranges[-1][1] + 1:
                 final_ranges[-1] = (final_ranges[-1][0], max(final_ranges[-1][1], r[1]))
             else:
                 final_ranges.append(r)
-
-        # 构建带行号的输出，范围之间插入省略标记
         result_parts: List[str] = []
         for i, (start, end) in enumerate(final_ranges):
             if i > 0:
                 skipped = start - final_ranges[i - 1][1] - 1
                 result_parts.append("   ... (省略 {} 行) ...".format(skipped))
-
             for line_no in range(start, end + 1):
                 line_text = file_lines[line_no - 1]
                 result_parts.append("{:>6}| {}".format(line_no, line_text))
-
         return "\n".join(result_parts)
 
     def _parse_response(self, raw: str) -> dict:
@@ -356,7 +351,6 @@ class ReviewerService:
         if text.endswith("```"):
             text = text[:-3]
         text = text.strip()
-
         try:
             return json.loads(text)
         except json.JSONDecodeError:
@@ -366,29 +360,19 @@ class ReviewerService:
                 "suggestions": [],
             }
 
-
     @staticmethod
     def _append_analysis_scope(summary: str, diff_ctx: DiffContext) -> str:
-        """在 LLM 生成的摘要末尾追加分析范围说明，帮助用户了解 AI 覆盖了什么。"""
         deep_count = len(diff_ctx.priority_files)
         shallow_count = len(diff_ctx.low_priority_files)
         filtered_count = len(diff_ctx.filtered_files)
-
         if shallow_count == 0 and filtered_count == 0:
             return summary
-
         lines = [summary, "", "---", "**分析范围**:"]
-        lines.append(
-            "- 深度分析（完整代码+上下文）: {} 个文件".format(deep_count)
-        )
+        lines.append("- 深度分析（完整代码+上下文）: {} 个文件".format(deep_count))
         if shallow_count:
-            lines.append(
-                "- 基本分析（截断 diff）: {} 个文件（建议人工复查）".format(shallow_count)
-            )
+            lines.append("- 基本分析（截断 diff）: {} 个文件（建议人工复查）".format(shallow_count))
         if filtered_count:
-            lines.append(
-                "- 自动跳过: {} 个文件（lock/二进制/生成代码）".format(filtered_count)
-            )
+            lines.append("- 自动跳过: {} 个文件（lock/二进制/生成代码）".format(filtered_count))
         return "\n".join(lines)
 
     @staticmethod
@@ -406,7 +390,6 @@ class ReviewerService:
             "best-practice": "\u2705",
             "bug-risk": "\U0001f41b",
         }
-
         lines = []
         lines.append("## \U0001f916 AI PR Review \u6458\u8981")
         lines.append("")
@@ -418,16 +401,12 @@ class ReviewerService:
             )
         )
         lines.append("")
-
         if response.summary:
             lines.append("### \U0001f4dd \u53d8\u66f4\u6458\u8981")
             lines.append(response.summary)
             lines.append("")
-
         if response.risk_items:
-            lines.append(
-                "### \u26a0\ufe0f \u98ce\u9669\u9879 ({})".format(len(response.risk_items))
-            )
+            lines.append("### \u26a0\ufe0f \u98ce\u9669\u9879 ({})".format(len(response.risk_items)))
             lines.append("")
             for item in response.risk_items:
                 emoji = severity_emoji.get(item.severity, "\u26aa")
@@ -435,11 +414,8 @@ class ReviewerService:
                 if item.suggestion:
                     lines.append("  > \U0001f4a1 \u4fee\u590d\u5efa\u8bae: {}".format(item.suggestion))
             lines.append("")
-
         if response.suggestions:
-            lines.append(
-                "### \U0001f4a1 \u6539\u8fdb\u5efa\u8bae ({})".format(len(response.suggestions))
-            )
+            lines.append("### \U0001f4a1 \u6539\u8fdb\u5efa\u8bae ({})".format(len(response.suggestions)))
             lines.append("")
             for item in response.suggestions:
                 emoji = category_emoji.get(item.category, "\U0001f4cc")
@@ -449,7 +425,6 @@ class ReviewerService:
                     lines.append("  {}".format(item.code_snippet))
                     lines.append("  ```")
             lines.append("")
-
         pr_info = response.pr_info
         lines.append("---")
         lines.append(
@@ -457,7 +432,6 @@ class ReviewerService:
                 pr_info.owner, pr_info.repo, pr_info.number,
             )
         )
-
         return "\n".join(lines)
 
 

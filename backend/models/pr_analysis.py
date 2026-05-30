@@ -39,6 +39,8 @@ class PRAnalysis(Base):
     risk_level: Mapped[str] = mapped_column(String(50), default="low")
     estimated_review_minutes: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(50), default="pending")
+    feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confidence_scores: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

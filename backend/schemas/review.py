@@ -39,6 +39,8 @@ class RiskItem(BaseModel):
     line: int
     description: str
     suggestion: str
+    confidence: Optional[float] = None
+    is_false_positive: bool = False
 
 
 class Suggestion(BaseModel):
@@ -46,6 +48,7 @@ class Suggestion(BaseModel):
     description: str
     file: str
     code_snippet: str = ""
+    confidence: Optional[float] = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -54,13 +57,11 @@ class AnalyzeResponse(BaseModel):
     risk_items: list[RiskItem] = []
     suggestions: list[Suggestion] = []
     risk_score: int = 0
-    """综合风险评分 0-100。"""
     risk_level: str = "low"
-    """风险等级：low / medium / high / critical。"""
     estimated_review_minutes: int = 0
-    """估算审查时间（分钟）。"""
     context_coverage: Optional[float] = None
     rule_matches: list["RuleMatch"] = []
+    analysis_id: Optional[int] = None
 
 
 class RuleMatch(BaseModel):
@@ -195,3 +196,13 @@ class TrendSummary(BaseModel):
 class TrendResponse(BaseModel):
     data_points: list[TrendDataPoint] = []
     summary: TrendSummary
+
+
+class FeedbackItem(BaseModel):
+    index: int
+    verdict: str = Field(..., pattern="^(accepted|false_positive|helpful|not_helpful)$")
+    category: str = Field(..., pattern="^(risk_item|suggestion)$")
+
+
+class FeedbackRequest(BaseModel):
+    items: list[FeedbackItem]
