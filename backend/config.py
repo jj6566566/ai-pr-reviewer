@@ -22,7 +22,7 @@ class Settings:
     GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
     GITHUB_REDIRECT_URI: str = os.getenv(
         "GITHUB_REDIRECT_URI",
-        "http://localhost:5173/api/auth/callback",
+        "http://localhost:5174/api/auth/callback",
     )
 
     # JWT
