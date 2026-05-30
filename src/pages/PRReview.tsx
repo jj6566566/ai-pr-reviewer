@@ -28,6 +28,7 @@ import type {
 import { RISK_SEVERITY_CONFIG, RISK_LEVEL_CONFIG, SEVERITY_ORDER } from "@/types/review"
 import { fetchHistory, fetchHistoryDetail, submitFeedback } from "@/api/review"
 import ReviewChat from "@/components/ReviewChat"
+import DiffViewer from "@/components/DiffViewer"
 
 const riskLevelOptions = [
   { value: "all", label: "全部等级" },
@@ -98,15 +99,17 @@ export default function PRReview() {
       next.add(id)
       return next
     })
+    if (detailMap[id]) return
     setLoadingIds((prev) => new Set(prev).add(id))
     try {
       const d = await fetchHistoryDetail(id)
       setDetailMap((prev) => ({ ...prev, [id]: d }))
     } catch {
-      setDetailMap((prev) => {
-        const next = { ...prev }
-        delete next[id]
+      setExpandedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
         return next
+      })
       })
     } finally {
       setLoadingIds((prev) => {
@@ -433,6 +436,17 @@ export default function PRReview() {
                                 )
                               })}
                             </div>
+                          </div>
+                        )}
+                        {detail.diff_content && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-[#06d6a0] mb-2">
+                              Diff 视图
+                            </h5>
+                            <DiffViewer
+                              diffContent={detail.diff_content}
+                              riskItems={detail.risk_items}
+                            />
                           </div>
                         )}
                         {detail && (

@@ -19,7 +19,7 @@ export async function analyzePR(params: AnalyzeRequest): Promise<AnalyzeResult> 
   const response = await fetch(`${API_BASE}/review/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ owner: owner.trim(), repo: repo.trim(), pr_number: prNumber }),
+    body: JSON.stringify({ owner: owner.trim(), repo: repo.trim(), pr_number: prNumber, post_comment: params.postComment ?? false }),
   })
 
   if (!response.ok) {
@@ -147,7 +147,8 @@ export type BatchStreamHandlers = {
 export function analyzeBatchStream(
   prs: BatchAnalyzeItem[],
   handlers: BatchStreamHandlers,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  postComment?: boolean
 ): () => void {
   const controller = new AbortController()
   const combinedSignal = signal
@@ -157,7 +158,7 @@ export function analyzeBatchStream(
   fetch(`${API_BASE}/review/batch-stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ prs }),
+    body: JSON.stringify({ prs, post_comment: postComment ?? false }),
     signal: combinedSignal,
   }).then(async (response) => {
     try {

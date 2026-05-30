@@ -42,6 +42,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import RepoSelector from "@/components/RepoSelector"
 import PRList from "@/components/PRList"
 import ReviewChat from "@/components/ReviewChat"
+import DiffViewer from "@/components/DiffViewer"
 
 const severityIcons: Record<string, typeof Bug> = {
   critical: Bug,
@@ -53,7 +54,7 @@ const severityIcons: Record<string, typeof Bug> = {
 type AnalysisMode = "single" | "batch"
 type FeedbackState = Record<string, "accepted" | "false_positive" | "helpful" | "not_helpful">
 
-function RiskList({ risks, feedback, analysisId, onFeedbackChange }: { risks: RiskItem[]; feedback: FeedbackState; analysisId?: number; onFeedbackChange?: () => void }) {
+function RiskList({ risks, feedback, analysisId, highlightedIdx, onFeedbackChange }: { risks: RiskItem[]; feedback: FeedbackState; analysisId?: number; highlightedIdx?: number | null; onFeedbackChange?: () => void }) {
   const handleFeedback = async (idx: number, verdict: "accepted" | "false_positive") => {
     if (!analysisId) return
     try {
@@ -88,9 +89,10 @@ function RiskList({ risks, feedback, analysisId, onFeedbackChange }: { risks: Ri
         return (
           <div
             key={i}
+            data-risk-idx={i}
             className={`group relative p-4 rounded-xl border transition-all duration-300 hover:-translate-y-0.5 ${
               isFalsePositive ? "border-[#f59e0b]/20 bg-[#f59e0b]/2" : ""
-            }`}
+            } ${highlightedIdx === i ? "ring-2 ring-[#06d6a0]/50 scale-[1.02]" : ""}`}
             style={{ borderColor: isFalsePositive ? "rgba(245,158,11,0.2)" : `${sevConfig.color}25`, backgroundColor: isFalsePositive ? "rgba(245,158,11,0.03)" : "#0a0e1a" }}
           >
             {isFalsePositive && (
@@ -282,7 +284,9 @@ export default function AnalyzePage() {
   const [streamProgress, setStreamProgress] = useState("")
   const [result, setResult] = useState<AnalyzeResponse | null>(null)
   const [error, setError] = useState("")
-  const [activeTab, setActiveTab] = useState<"risks" | "suggestions" | "rules">("risks")
+  const [postComment, setPostComment] = useState(true)
+  const [activeTab, setActiveTab] = useState<"risks" | "suggestions" | "rules" | "diff">("risks")
+  const [highlightedRiskIdx, setHighlightedRiskIdx] = useState<number | null>(null)
   const cancelFn = useRef<(() => void) | null>(null)
 
   const [selectedPRs, setSelectedPRs] = useState<number[]>([])
@@ -423,7 +427,7 @@ export default function AnalyzePage() {
     setStreamProgress("正在获取 PR 信息...")
 
     cancelFn.current = analyzePRStream(
-      { owner: o, repo: r, prNumber: num },
+      { owner: o, repo: r, prNumber: num, postComment },
       (progress) => {
         setStreamProgress(`已获取 ${progress.files_changed} 个文件，+${progress.additions}/-${progress.deletions} 行`)
       },
@@ -496,7 +500,9 @@ export default function AnalyzePage() {
           setBatchStreamState(null)
           cancelFn.current = null
         },
-      }
+      },
+      undefined,
+      postComment
     )
   }
 
@@ -654,6 +660,23 @@ export default function AnalyzePage() {
               {error}
             </div>
           )}
+
+          <div className="flex items-center justify-between mt-4">
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={postComment}
+                  onChange={(e) => setPostComment(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`w-10 h-5 rounded-full transition-colors duration-200 ${postComment ? "bg-[#06d6a0]" : "bg-[#2d3560]"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${postComment ? "translate-x-5" : "translate-x-0.5"}`} />
+                </div>
+              </div>
+              <span className="text-xs text-[#b8c4d8]">分析完成后发布评论到 PR</span>
+            </label>
+          </div>
 
           <div className="flex gap-3 mt-4">
             {mode === "single" && (
@@ -910,6 +933,7 @@ export default function AnalyzePage() {
                 { key: "risks", label: "风险项", count: result.risk_items.length, color: "#ef4444", icon: Shield },
                 { key: "suggestions", label: "改进建议", count: result.suggestions.length, color: "#3b82f6", icon: Zap },
                 { key: "rules", label: "规则命中", count: result.rule_matches.length, color: "#7c3aed", icon: Target },
+                { key: "diff", label: "Diff 视图", count: 0, color: "#06d6a0", icon: FileCode },
               ].map((tab) => {
                 const TabIcon = tab.icon
                 return (
@@ -939,13 +963,28 @@ export default function AnalyzePage() {
 
             <div className="p-5 h-[500px] overflow-y-auto">
               <div className={activeTab === "risks" ? "" : "hidden"}>
-                <RiskList risks={sortedRisks} feedback={feedback} analysisId={result.analysis_id} onFeedbackChange={() => setFeedback({ ...feedback })} />
+                <RiskList risks={sortedRisks} feedback={feedback} analysisId={result.analysis_id} highlightedIdx={highlightedRiskIdx} onFeedbackChange={() => setFeedback({ ...feedback })} />
               </div>
               <div className={activeTab === "suggestions" ? "" : "hidden"}>
                 <SuggestionList suggestions={result.suggestions} feedback={feedback} analysisId={result.analysis_id} onFeedbackChange={() => setFeedback({ ...feedback })} />
               </div>
               <div className={activeTab === "rules" ? "" : "hidden"}>
                 <RuleMatchesView matches={result.rule_matches} />
+              </div>
+              <div className={activeTab === "diff" ? "" : "hidden"}>
+                <DiffViewer
+                  diffContent={result.pr_info.diff_content}
+                  riskItems={result.risk_items}
+                  highlightedRiskIdx={highlightedRiskIdx}
+                  onRiskClick={(idx) => {
+                    setHighlightedRiskIdx(idx)
+                    setActiveTab("risks")
+                    setTimeout(() => {
+                      const el = document.querySelector(`[data-risk-idx="${idx}"]`)
+                      el?.scrollIntoView({ behavior: "smooth", block: "center" })
+                    }, 100)
+                  }}
+                />
               </div>
             </div>
           </div>

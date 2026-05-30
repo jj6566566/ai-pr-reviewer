@@ -2,6 +2,7 @@ export interface AnalyzeRequest {
   owner: string
   repo: string
   prNumber: number
+  postComment?: boolean
 }
 
 export interface PRFile {
@@ -112,6 +113,7 @@ export interface HistoryDetail extends HistoryItem {
   estimated_review_minutes: number
   feedback?: Record<string, { verdict: string; timestamp?: string | null }> | null
   confidence_scores?: Record<string, number> | null
+  diff_content?: string | null
 }
 
 export interface CustomRule {
