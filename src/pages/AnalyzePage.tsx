@@ -935,6 +935,12 @@ export default function AnalyzePage() {
             </div>
           )}
 
+          {result.risk_clusters && result.risk_clusters.length > 0 && (
+            <div className="mt-4">
+              <RiskClusterView clusters={result.risk_clusters} risks={result.risk_items} />
+            </div>
+          )}
+
           <div className="bg-[#131829] border border-[#1e2440] rounded-xl overflow-hidden shadow-lg shadow-black/20">
             <div className="flex border-b border-[#1e2440] bg-[#0a0e1a]/50">
               {[
@@ -1103,6 +1109,16 @@ export default function AnalyzePage() {
                     </p>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {batchResult.overview.risk_amplification && batchResult.overview.risk_amplification > 0 && (
+              <div className="mt-4 p-4 bg-[#ef4444]/5 border border-[#ef4444]/30 rounded-lg">
+                <p className="text-xs font-semibold text-[#ef4444] mb-1 flex items-center gap-1">
+                  <Bug size={12} />
+                  跨 PR 风险放大 +{batchResult.overview.risk_amplification} 分
+                </p>
+                <p className="text-xs text-[#fbbf24]">{batchResult.overview.amplification_reason}</p>
               </div>
             )}
           </div>
@@ -1319,6 +1335,9 @@ export default function AnalyzePage() {
                           {prResult.intent_check && (
                             <IntentCheckCard data={prResult.intent_check} />
                           )}
+                          {prResult.risk_clusters && prResult.risk_clusters.length > 0 && (
+                            <RiskClusterView clusters={prResult.risk_clusters} risks={prResult.risk_items} />
+                          )}
                           {prResult.risk_items.length > 0 && (
                             <div>
                               <div className="flex items-center justify-between mb-2">
@@ -1393,6 +1412,54 @@ export default function AnalyzePage() {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out both; }
       `}</style>
+    </div>
+  )
+}
+
+function RiskClusterView({ clusters, risks }: { clusters: { category: string; label: string; risk_indices: number[]; dominant_severity: string; count: number }[]; risks: RiskItem[] }) {
+  return (
+    <div className="bg-[#131829] border border-[#1e2440] rounded-xl p-5 shadow-lg shadow-black/20">
+      <p className="text-sm font-semibold text-[#e4e8f1] mb-3 flex items-center gap-2">
+        <Layers size={16} className="text-[#7c3aed]" />
+        风险聚类
+        <span className="text-xs text-[#7b829c] font-normal">{clusters.length} 个类别</span>
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {clusters.map((cluster, ci) => {
+          const sevConfig = RISK_SEVERITY_CONFIG[cluster.dominant_severity as keyof typeof RISK_SEVERITY_CONFIG]
+          return (
+            <div
+              key={ci}
+              className="p-3 rounded-lg border transition-all hover:-translate-y-0.5 cursor-pointer"
+              style={{ backgroundColor: `${sevConfig?.color || "#06d6a0"}08`, borderColor: `${sevConfig?.color || "#06d6a0"}20` }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold" style={{ color: sevConfig?.color || "#06d6a0" }}>{cluster.label}</span>
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  style={{ backgroundColor: `${sevConfig?.color || "#06d6a0"}15`, color: sevConfig?.color || "#06d6a0" }}
+                >
+                  {cluster.count} 项
+                </span>
+              </div>
+              <div className="space-y-1">
+                {cluster.risk_indices.slice(0, 3).map((idx) => {
+                  const risk = risks[idx]
+                  if (!risk) return null
+                  return (
+                    <p key={idx} className="text-xs text-[#b8c4d8] truncate" title={risk.description}>
+                      <span className="text-[#7b829c]">{risk.file}</span> {risk.description}
+                    </p>
+                  )
+                })}
+                {cluster.risk_indices.length > 3 && (
+                  <p className="text-[10px] text-[#7b829c]">...还有 {cluster.risk_indices.length - 3} 项</p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

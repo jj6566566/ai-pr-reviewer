@@ -240,17 +240,19 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, user: User = Depend
                     json.dumps({"pr_number": item.pr_number, "error": str(e)})
                 )
 
-        overview = _compute_batch_overview(results)
-        dup_result = None
+        dup_result_obj = None
         try:
-            dup = detect_cross_pr_duplicates(results)
-            dup_result = dup.model_dump(mode="json")
+            dup_result_obj = detect_cross_pr_duplicates(results)
         except Exception as e:
             logger.error("跨PR重复检测失败: %s", e)
 
+        overview = _compute_batch_overview(results, dup_result_obj)
+
+        dup_result_raw = dup_result_obj.model_dump(mode="json") if dup_result_obj else None
+
         batch_response = BatchAnalyzeResponse(
             results=results, overview=overview,
-            duplicate_analysis=CrossPRDuplicateResult(**dup_result) if dup_result else None,
+            duplicate_analysis=CrossPRDuplicateResult(**dup_result_raw) if dup_result_raw else None,
         )
         yield "event: batch_complete\ndata: {}\n\n".format(
             json.dumps(batch_response.model_dump(mode="json"), ensure_ascii=False)
@@ -345,11 +347,10 @@ async def batch_analyze(request: BatchAnalyzeRequest, user: User = Depends(requi
 
         results.append(response)
 
-    overview = _compute_batch_overview(results)
-
     duplicate_analysis = None
+    dup_result_obj = None
     try:
-        dup_result = detect_cross_pr_duplicates(results)
+        dup_result_obj = detect_cross_pr_duplicates(results)
         duplicate_analysis = CrossPRDuplicateResult(
             file_overlaps=[
                 FileOverlapItem(
@@ -357,7 +358,7 @@ async def batch_analyze(request: BatchAnalyzeRequest, user: User = Depends(requi
                     pr_numbers=fo.pr_numbers,
                     changes_detail=fo.changes_detail,
                 )
-                for fo in dup_result.file_overlaps
+                for fo in dup_result_obj.file_overlaps
             ],
             similar_code_blocks=[
                 SimilarCodeBlockItem(
@@ -367,7 +368,7 @@ async def batch_analyze(request: BatchAnalyzeRequest, user: User = Depends(requi
                     similarity_score=sc.similarity_score,
                     snippet_preview=sc.snippet_preview,
                 )
-                for sc in dup_result.similar_code_blocks
+                for sc in dup_result_obj.similar_code_blocks
             ],
             duplicate_risk_patterns=[
                 DuplicateRiskPatternItem(
@@ -376,12 +377,14 @@ async def batch_analyze(request: BatchAnalyzeRequest, user: User = Depends(requi
                     severity=dp.severity,
                     occurrence_count=dp.occurrence_count,
                 )
-                for dp in dup_result.duplicate_risk_patterns
+                for dp in dup_result_obj.duplicate_risk_patterns
             ],
-            summary=dup_result.summary,
+            summary=dup_result_obj.summary,
         )
     except Exception as e:
         logger.error("\u8de8PR\u91cd\u590d\u68c0\u6d4b\u5931\u8d25: %s", e)
+
+    overview = _compute_batch_overview(results, dup_result_obj)
 
     return BatchAnalyzeResponse(results=results, overview=overview, duplicate_analysis=duplicate_analysis)
 
@@ -389,7 +392,7 @@ async def batch_analyze(request: BatchAnalyzeRequest, user: User = Depends(requi
 SEVERITY_WEIGHT = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
 
-def _compute_batch_overview(results: list) -> BatchOverview:
+def _compute_batch_overview(results: list, duplicate_result=None) -> BatchOverview:
     total_prs = len(results)
 
     avg_risk_score = sum(r.risk_score for r in results) / total_prs if total_prs > 0 else 0.0
@@ -426,12 +429,28 @@ def _compute_batch_overview(results: list) -> BatchOverview:
         if len(top_risks) >= 5:
             break
 
+    risk_amplification = 0
+    amplification_reason = ""
+    if duplicate_result and duplicate_result.duplicate_risk_patterns:
+        sev_weights = SEVERITY_WEIGHT or {"critical": 25, "high": 15, "medium": 8, "low": 3}
+        for pattern in duplicate_result.duplicate_risk_patterns:
+            if pattern.occurrence_count >= 3:
+                risk_amplification += sev_weights.get(pattern.severity, 8)
+            elif pattern.occurrence_count >= 2:
+                risk_amplification += sev_weights.get(pattern.severity, 8) // 2
+        if risk_amplification > 0:
+            amplification_reason = "{} 个风险模式跨 PR 重复出现，整体风险已放大".format(
+                len(duplicate_result.duplicate_risk_patterns)
+            )
+
     return BatchOverview(
         total_prs=total_prs,
         avg_risk_score=avg_risk_score,
         highest_risk_pr=highest_risk_pr,
         risk_distribution=risk_distribution,
         top_risks=top_risks,
+        risk_amplification=risk_amplification,
+        amplification_reason=amplification_reason,
     )
 
 
