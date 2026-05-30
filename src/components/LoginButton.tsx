@@ -37,7 +37,7 @@ export default function LoginButton() {
 
   return (
     <button
-      onClick={login}
+      onClick={() => login()}
       className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#e4e8f1] bg-[#1e2440] border border-[#2d3560] rounded-lg hover:bg-[#2d3560] hover:border-[#06d6a0]/30 transition-all"
     >
       <Github size={16} />

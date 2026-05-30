@@ -29,26 +29,27 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 # ---------------------------------------------------------------------------
 # 内存 OAuth state 存储（生产环境应使用 Redis）
 # ---------------------------------------------------------------------------
-_OAUTH_STATES: dict[str, str] = {}
+_OAUTH_STATES: dict[str, dict] = {}
 
 
 # ---------------------------------------------------------------------------
 # 登录入口
 # ---------------------------------------------------------------------------
 @router.get("/login", response_model=LoginResponse)
-async def login() -> LoginResponse:
+async def login(redirect: str = Query("/", description="登录成功后重定向的路径")) -> LoginResponse:
     """返回 GitHub OAuth 授权页 URL。
 
     客户端拿到 url 后应将浏览器重定向到该地址。
     """
     state = secrets.token_urlsafe(32)
-    _OAUTH_STATES[state] = state
+    _OAUTH_STATES[state] = {"redirect": redirect}
 
     params = {
         "client_id": settings.GITHUB_CLIENT_ID,
         "redirect_uri": settings.GITHUB_REDIRECT_URI,
         "state": state,
         "scope": "repo",
+        "prompt": "select_account",
     }
     url = f"https://github.com/login/oauth/authorize?{urlencode(params)}"
     return LoginResponse(url=url)
@@ -77,7 +78,9 @@ async def callback(
     # --- CSRF 校验 ----------------------------------------------------------
     if state not in _OAUTH_STATES:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
-    del _OAUTH_STATES[state]
+    
+    stored_data = _OAUTH_STATES.pop(state)
+    redirect_to = stored_data.get("redirect", "/")
 
     frontend_base = "http://localhost:5174"
 
@@ -164,7 +167,7 @@ async def callback(
     # --- 签发 JWT，重定向前端 ------------------------------------------------
     jwt_token = create_jwt(user)
     return RedirectResponse(
-        url=f"{frontend_base}/auth/callback?token={jwt_token}"
+        url=f"{frontend_base}/auth/callback?token={jwt_token}&redirect={urlencode({'redirect': redirect_to})}"
     )
 
 

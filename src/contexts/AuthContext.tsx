@@ -6,7 +6,7 @@ interface AuthState {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: () => Promise<void>
+  login: (redirect?: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -17,10 +17,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    getCurrentUser().then((u) => {
-      setUser(u)
-      setIsLoading(false)
-    })
+    const fetchUser = async () => {
+      try {
+        const u = await getCurrentUser()
+        setUser(u)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchUser()
 
     const handleAuthChanged = () => {
       getCurrentUser().then((u) => setUser(u))
@@ -29,8 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("auth-changed", handleAuthChanged)
   }, [])
 
-  const login = useCallback(async () => {
-    const url = await getLoginUrl()
+  const login = useCallback(async (redirect?: string) => {
+    const url = await getLoginUrl(redirect)
     window.location.href = url
   }, [])
 
