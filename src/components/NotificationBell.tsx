@@ -101,7 +101,10 @@ export default function NotificationBell() {
 
   const handleClickPR = (n: Notification) => {
     markAsSeen(n)
-    setOpen(false)
+  }
+
+  const handleGoAnalyze = (n: Notification) => {
+    markAsSeen(n)
     navigate(`/analyze?owner=${encodeURIComponent(n.repo_owner)}&repo=${encodeURIComponent(n.repo_name)}&pr=${n.pr_number}`)
   }
 
@@ -173,48 +176,61 @@ export default function NotificationBell() {
               notifications.map((n) => {
                 const isNew = !seenPRs.has(prKey(n))
                 return (
-                  <button
+                  <div
                     key={prKey(n)}
                     onClick={() => handleClickPR(n)}
-                    className={`w-full flex items-start gap-3 px-5 py-3 text-left hover:bg-[#1e2440]/50 transition-all border-b border-[#1e2440]/50 ${
+                    className={`cursor-pointer px-5 pt-3 pb-2 text-left hover:bg-[#1e2440]/50 transition-all border-b border-[#1e2440]/50 ${
                       isNew ? "bg-[#06d6a0]/3" : ""
                     }`}
                   >
-                    <div className="flex-shrink-0 mt-0.5">
-                      {n.author_avatar ? (
-                        <img
-                          src={n.author_avatar}
-                          alt={n.author}
-                          className="w-8 h-8 rounded-full border border-[#1e2440]"
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-[#1e2440] flex items-center justify-center">
-                          <GitPullRequest size={14} className="text-[#7b829c]" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1e2440] text-[#58a6ff] font-mono truncate max-w-[140px]">
-                          {n.repo_full_name}
-                        </span>
-                        <span className="text-[11px] text-[#58a6ff] font-semibold">
-                          #{n.pr_number}
-                        </span>
-                        {isNew && (
-                          <span className="w-2 h-2 rounded-full bg-[#ef4444] flex-shrink-0" />
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        {n.author_avatar ? (
+                          <img
+                            src={n.author_avatar}
+                            alt={n.author}
+                            className="w-8 h-8 rounded-full border border-[#1e2440]"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-[#1e2440] flex items-center justify-center">
+                            <GitPullRequest size={14} className="text-[#7b829c]" />
+                          </div>
                         )}
                       </div>
-                      <p className="text-sm text-[#e4e8f1] truncate leading-snug">{n.title}</p>
-                      <div className="flex items-center gap-1 mt-1 text-[10px] text-[#7b829c]">
-                        <span>{n.author}</span>
-                        <span>·</span>
-                        <Clock size={10} />
-                        <span>{timeAgo(n.created_at)}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1e2440] text-[#58a6ff] font-mono truncate max-w-[140px]">
+                            {n.repo_full_name}
+                          </span>
+                          <span className="text-[11px] text-[#58a6ff] font-semibold">
+                            #{n.pr_number}
+                          </span>
+                          {isNew && (
+                            <span className="w-2 h-2 rounded-full bg-[#ef4444] flex-shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-sm text-[#e4e8f1] truncate leading-snug">{n.title}</p>
+                        <div className="flex items-center gap-1 mt-1 text-[10px] text-[#7b829c]">
+                          <span>{n.author}</span>
+                          <span>·</span>
+                          <Clock size={10} />
+                          <span>{timeAgo(n.created_at)}</span>
+                        </div>
                       </div>
                     </div>
-                    <ExternalLink size={13} className="text-[#4a5178] flex-shrink-0 mt-1 opacity-0 group-hover:opacity-100" />
-                  </button>
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleGoAnalyze(n)
+                        }}
+                        className="text-xs px-3 py-1 rounded-md bg-[#06d6a0]/10 text-[#06d6a0] hover:bg-[#06d6a0]/20 border border-[#06d6a0]/20 hover:border-[#06d6a0]/40 transition-all flex items-center gap-1"
+                      >
+                        去分析
+                        <ExternalLink size={10} />
+                      </button>
+                    </div>
+                  </div>
                 )
               })
             )}
