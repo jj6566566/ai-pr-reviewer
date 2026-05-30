@@ -6,6 +6,7 @@ import SideNav from "@/components/SideNav"
 import Dashboard from "@/pages/Dashboard"
 import AnalyzePage from "@/pages/AnalyzePage"
 import PRReview from "@/pages/PRReview"
+import InsightsPage from "@/pages/InsightsPage"
 import SettingsPage from "@/pages/SettingsPage"
 import LoginPage from "@/pages/LoginPage"
 import AuthCallback from "@/pages/AuthCallback"
@@ -32,6 +33,7 @@ export default function App() {
                           <Route path="/" element={<Dashboard />} />
                           <Route path="/analyze" element={<AnalyzePage />} />
                           <Route path="/review" element={<PRReview />} />
+                          <Route path="/insights" element={<InsightsPage />} />
                           <Route path="/settings" element={<SettingsPage />} />
                         </Routes>
                       </div>

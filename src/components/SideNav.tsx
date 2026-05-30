@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   SearchCode,
   GitPullRequest,
+  Lightbulb,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -14,6 +15,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "仪表盘" },
   { to: "/analyze", icon: SearchCode, label: "PR 分析" },
   { to: "/review", icon: GitPullRequest, label: "评审队列" },
+  { to: "/insights", icon: Lightbulb, label: "代码洞察" },
   { to: "/settings", icon: Settings, label: "系统设置" },
 ]
 

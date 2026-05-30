@@ -337,3 +337,213 @@ async def get_trends(db: AsyncSession, days: int, repo_owner: Optional[str] = No
         }
         for row in rows
     ]
+
+
+async def get_insights_data(
+    db: AsyncSession, owner: Optional[str] = None, repo: Optional[str] = None
+) -> dict:
+    stmt = select(
+        PRAnalysis.risk_items,
+        PRAnalysis.repo_owner,
+        PRAnalysis.repo_name,
+        PRAnalysis.pr_number,
+    ).where(PRAnalysis.status == "completed")
+    if owner:
+        stmt = stmt.where(PRAnalysis.repo_owner == owner)
+    if repo:
+        stmt = stmt.where(PRAnalysis.repo_name == repo)
+    stmt = stmt.order_by(PRAnalysis.created_at.desc()).limit(500)
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    dir_risks: dict[str, dict] = {}
+    desc_counter: dict[str, dict] = {}
+    desc_prs: dict[str, set] = {}
+
+    total_analyses = len(rows)
+    seen_pr_keys = set()
+
+    for risk_json, r_owner, r_repo, pr_num in rows:
+        pr_key = (r_owner, r_repo, pr_num)
+        if pr_key in seen_pr_keys:
+            continue
+        seen_pr_keys.add(pr_key)
+
+        if not risk_json:
+            continue
+        try:
+            items = json.loads(risk_json)
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        for item in items:
+            sev = item.get("severity", "low")
+            desc = (item.get("description", "") or "").strip()
+            fname = (item.get("file", "") or "").strip()
+
+            if fname:
+                directory = "/".join(fname.split("/")[:-1]) or "root"
+                if directory not in dir_risks:
+                    dir_risks[directory] = {"risk_count": 0, "critical": 0, "high": 0}
+                dir_risks[directory]["risk_count"] += 1
+                if sev == "critical":
+                    dir_risks[directory]["critical"] += 1
+                elif sev == "high":
+                    dir_risks[directory]["high"] += 1
+
+            if desc:
+                key = desc[:200]
+                if key not in desc_counter:
+                    desc_counter[key] = {"count": 0, "severity": sev, "description": desc}
+                desc_counter[key]["count"] += 1
+                if {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(sev, 1) > {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(desc_counter[key]["severity"], 1):
+                    desc_counter[key]["severity"] = sev
+
+                if key not in desc_prs:
+                    desc_prs[key] = set()
+                desc_prs[key].add(pr_key)
+
+    heatmap = sorted(
+        [
+            {
+                "directory": d,
+                "risk_count": v["risk_count"],
+                "critical_count": v["critical"],
+                "high_count": v["high"],
+                "avg_severity": "critical" if v["critical"] > 0 else "high" if v["high"] > 0 else "medium" if v["risk_count"] > 3 else "low",
+            }
+            for d, v in dir_risks.items()
+        ],
+        key=lambda x: -x["risk_count"],
+    )[:20]
+
+    top_issues = sorted(
+        [
+            {
+                "description": _translate_desc(v["description"]),
+                "count": v["count"],
+                "severity": v["severity"],
+                "category": _guess_category(v["description"]),
+            }
+            for v in desc_counter.values()
+        ],
+        key=lambda x: -x["count"],
+    )[:15]
+
+    cross_pr = sorted(
+        [
+            {
+                "description": _translate_desc(v["description"]),
+                "severity": v["severity"],
+                "pr_count": len(desc_prs.get(k, set())),
+            }
+            for k, v in desc_counter.items()
+            if len(desc_prs.get(k, set())) >= 2
+        ],
+        key=lambda x: -x["pr_count"],
+    )[:10]
+
+    suggested_rules = _generate_suggested_rules(top_issues)
+
+    return {
+        "directory_heatmap": heatmap,
+        "top_issues": top_issues,
+        "cross_pr_patterns": cross_pr,
+        "suggested_rules": suggested_rules,
+        "total_analyses": total_analyses,
+    }
+
+
+EN_PATTERNS = {
+    "race condition": "竞态条件",
+    "xss vulnerability": "XSS 跨站脚本漏洞",
+    "memory leak": "内存泄漏",
+    "unhandled error": "未处理的异常",
+    "missing validation": "缺少输入校验",
+    "sql injection": "SQL 注入漏洞",
+    "Potential critical issue:": "严重风险:",
+    "Potential high issue:": "高风险:",
+    "Potential medium issue:": "中风险:",
+    "Potential low issue:": "低风险:",
+}
+
+
+def _translate_desc(desc: str) -> str:
+    result = desc
+    for en, zh in EN_PATTERNS.items():
+        idx = result.lower().find(en.lower())
+        if idx >= 0:
+            result = result[:idx] + zh + result[idx + len(en):]
+    return result
+
+
+def _guess_category(desc: str) -> str:
+    lower = desc.lower()
+    for kw, cat in {
+        "sql": "安全",
+        "注入": "安全",
+        "xss": "安全",
+        "csrf": "安全",
+        "密码": "安全",
+        "token": "安全",
+        "认证": "安全",
+        "权限": "安全",
+        "加密": "安全",
+        "密钥": "安全",
+        "n+1": "性能",
+        "性能": "性能",
+        "慢": "性能",
+        "内存": "性能",
+        "资源": "性能",
+        "空指针": "健壮性",
+        "异常": "健壮性",
+        "错误处理": "健壮性",
+        "校验": "健壮性",
+        "null": "健壮性",
+        "race": "健壮性",
+        "leak": "性能",
+        "unhandled": "健壮性",
+        "validation": "健壮性",
+        "命名": "可维护性",
+        "注释": "可维护性",
+        "日志": "可维护性",
+        "重复": "可维护性",
+    }.items():
+        if kw in lower:
+            return cat
+    return "其他"
+
+
+def _generate_suggested_rules(top_issues: list) -> list[str]:
+    rules = []
+    templates = {
+        "SQL": "所有 SQL 查询必须使用参数化方式，禁止字符串拼接",
+        "注入": "对所有用户输入执行严格的输入校验和过滤",
+        "XSS": "所有用户输入在渲染前必须经过 HTML 转义",
+        "密码": "禁止在日志、代码注释或配置文件中硬编码密码和密钥",
+        "token": "Token 必须设置合理的过期时间，不长期有效",
+        "认证": "所有涉及认证的逻辑必须有完整的单元测试覆盖",
+        "权限": "接口必须进行权限校验，禁止越权访问",
+        "加密": "敏感数据传输和存储必须使用加密",
+        "密钥": "密钥和凭证统一管理，不得在代码中硬编码",
+        "n+1": "数据库查询避免 N+1 问题，使用联表查询或批量查询",
+        "性能": "对高频接口进行性能测试，确保响应时间在合理范围内",
+        "空指针": "对所有外部输入和可能为空的变量进行判空处理",
+        "异常": "异常处理必须具体，禁止使用空的 catch 块",
+        "校验": "所有外部输入必须进行类型、长度、范围校验",
+        "null": "函数返回值须明确是否可能为 None，调用方必须处理",
+        "命名": "变量和函数命名需遵循团队约定的命名规范",
+        "注释": "关键业务逻辑必须添加注释说明",
+        "日志": "日志输出不得包含敏感信息，生产环境控制日志级别",
+        "重复": "抽取重复代码为公共函数或工具类",
+    }
+    seen = set()
+    for issue in top_issues:
+        for kw, rule in templates.items():
+            if kw.lower() in issue["description"].lower() and rule not in seen:
+                rules.append(rule)
+                seen.add(rule)
+                if len(rules) >= 8:
+                    return rules
+    return rules

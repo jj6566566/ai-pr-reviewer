@@ -235,3 +235,32 @@ class FeedbackItem(BaseModel):
 
 class FeedbackRequest(BaseModel):
     items: list[FeedbackItem]
+
+
+class DirectoryHeatmapItem(BaseModel):
+    directory: str
+    risk_count: int
+    critical_count: int = 0
+    high_count: int = 0
+    avg_severity: str = "low"
+
+
+class TopIssueItem(BaseModel):
+    description: str
+    count: int
+    severity: str
+    category: str = ""
+
+
+class CrossPRPatternItem(BaseModel):
+    description: str
+    severity: str
+    pr_count: int
+
+
+class InsightsResponse(BaseModel):
+    directory_heatmap: list[DirectoryHeatmapItem] = []
+    top_issues: list[TopIssueItem] = []
+    cross_pr_patterns: list[CrossPRPatternItem] = []
+    suggested_rules: list[str] = []
+    total_analyses: int = 0
