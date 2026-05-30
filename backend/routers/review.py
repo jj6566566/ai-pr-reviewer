@@ -806,6 +806,7 @@ async def get_repo_health(
             func.sum(case((PRAnalysis.risk_level == "low", 1), else_=0)).label("low_count"),
             func.max(PRAnalysis.created_at).label("last_analysis_at"),
         )
+        .where(PRAnalysis.repo_owner == user.login)
         .group_by(PRAnalysis.repo_owner, PRAnalysis.repo_name)
         .order_by(func.avg(PRAnalysis.risk_score).desc())
     )
