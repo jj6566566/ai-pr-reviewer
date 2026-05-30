@@ -11,6 +11,7 @@ import StatCard from "@/components/StatCard"
 import PRListTable from "@/components/PRListTable"
 import ReviewSummary from "@/components/ReviewSummary"
 import TeamTrendChart from "@/components/TeamTrendChart"
+import RepoHealthCards from "@/components/RepoHealthCards"
 
 export default function Dashboard() {
   const [history, setHistory] = useState<HistoryItem[]>([])
@@ -28,7 +29,7 @@ export default function Dashboard() {
     setLoading(true)
     setTrendsLoading(true)
 
-    fetchHistory(50)
+    fetchHistory(500)
       .then((items) => {
         setHistory(items)
         const critical = items.filter((h) => h.risk_level === "critical").length
@@ -117,6 +118,8 @@ export default function Dashboard() {
         loading={trendsLoading}
         onRefresh={handleRefresh}
       />
+
+      <RepoHealthCards loading={loading} />
     </div>
   )
 }

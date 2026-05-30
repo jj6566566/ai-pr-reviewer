@@ -1,9 +1,37 @@
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Search, Bot, ScanLine } from "lucide-react"
 import { useStore } from "@/store/useStore"
 import LoginButton from "@/components/LoginButton"
+import NotificationBell from "@/components/NotificationBell"
 
 export default function TopNavbar() {
   const toggleSidebar = useStore((s) => s.toggleSidebar)
+  const navigate = useNavigate()
+  const [searchValue, setSearchValue] = useState("")
+
+  const handleSearch = () => {
+    const val = searchValue.trim()
+    if (!val) return
+
+    const match = val.match(/github\.com\/([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)\/pull\/(\d+)/)
+    if (match) {
+      const [, owner, repo, pr] = match
+      navigate(`/analyze?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&pr=${pr}`)
+      setSearchValue("")
+      return
+    }
+
+    const numMatch = val.match(/^#?(\d+)$/)
+    if (numMatch) {
+      setSearchValue("")
+      return
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") handleSearch()
+  }
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f1324] border-b border-[#1e2440]">
@@ -36,13 +64,17 @@ export default function TopNavbar() {
             />
             <input
               type="text"
-              placeholder="搜索 PRs 或粘贴链接..."
+              placeholder="粘贴 PR 链接或 #编号..."
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={handleKeyDown}
               className="w-full h-9 pl-9 pr-3 text-sm bg-[#0a0e1a] border border-[#1e2440] rounded-lg text-[#e4e8f1] placeholder-[#4a5178] focus:outline-none focus:border-[#06d6a0] transition-colors"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
+          <NotificationBell />
           <LoginButton />
         </div>
       </div>

@@ -10,6 +10,7 @@ import type {
   TrendResponse,
   FeedbackItem,
 } from "@/types/review"
+import { authHeaders } from "@/api/auth"
 
 const API_BASE = "/api"
 
@@ -17,7 +18,7 @@ export async function analyzePR(params: AnalyzeRequest): Promise<AnalyzeResult> 
   const { owner, repo, prNumber } = params
   const response = await fetch(`${API_BASE}/review/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ owner: owner.trim(), repo: repo.trim(), pr_number: prNumber }),
   })
 
@@ -55,7 +56,7 @@ export function analyzePRStream(
 
   fetch(`${API_BASE}/review/analyze-stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ owner: owner.trim(), repo: repo.trim(), pr_number: prNumber }),
     signal: combinedSignal,
   }).then(async (response) => {
@@ -114,13 +115,13 @@ export function analyzePRStream(
 }
 
 export async function fetchHistory(limit = 20): Promise<HistoryItem[]> {
-  const response = await fetch(`${API_BASE}/review/history?limit=${limit}`)
+  const response = await fetch(`${API_BASE}/review/history?limit=${limit}`, { headers: authHeaders() })
   if (!response.ok) throw new Error("获取历史记录失败")
   return response.json()
 }
 
 export async function fetchHistoryDetail(id: number): Promise<HistoryDetail> {
-  const response = await fetch(`${API_BASE}/review/history/${id}`)
+  const response = await fetch(`${API_BASE}/review/history/${id}`, { headers: authHeaders() })
   if (!response.ok) throw new Error("获取历史记录详情失败")
   return response.json()
 }
@@ -128,7 +129,7 @@ export async function fetchHistoryDetail(id: number): Promise<HistoryDetail> {
 export async function analyzeBatch(prs: BatchAnalyzeItem[]): Promise<BatchAnalyzeResponse> {
   const response = await fetch(`${API_BASE}/review/batch`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ prs }),
   })
   if (!response.ok) throw new Error("批量分析失败")
@@ -155,7 +156,7 @@ export function analyzeBatchStream(
 
   fetch(`${API_BASE}/review/batch-stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ prs }),
     signal: combinedSignal,
   }).then(async (response) => {
@@ -224,14 +225,14 @@ export function analyzeBatchStream(
 export async function submitFeedback(analysisId: number, items: FeedbackItem[]): Promise<void> {
   const response = await fetch(`${API_BASE}/review/feedback/${analysisId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ items }),
   })
   if (!response.ok) throw new Error("提交反馈失败")
 }
 
 export async function fetchRules(): Promise<CustomRule[]> {
-  const response = await fetch(`${API_BASE}/review/rules`)
+  const response = await fetch(`${API_BASE}/review/rules`, { headers: authHeaders() })
   if (!response.ok) throw new Error("获取规则列表失败")
   return response.json()
 }
@@ -239,7 +240,7 @@ export async function fetchRules(): Promise<CustomRule[]> {
 export async function createRule(data: Omit<CustomRule, "id" | "created_at" | "updated_at">): Promise<CustomRule> {
   const response = await fetch(`${API_BASE}/review/rules`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(data),
   })
   if (!response.ok) {
@@ -255,7 +256,7 @@ export async function updateRule(
 ): Promise<CustomRule> {
   const response = await fetch(`${API_BASE}/review/rules/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(data),
   })
   if (!response.ok) {
@@ -266,19 +267,19 @@ export async function updateRule(
 }
 
 export async function deleteRule(id: number): Promise<{ ok: boolean }> {
-  const response = await fetch(`${API_BASE}/review/rules/${id}`, { method: "DELETE" })
+  const response = await fetch(`${API_BASE}/review/rules/${id}`, { method: "DELETE", headers: authHeaders() })
   if (!response.ok) throw new Error("删除规则失败")
   return response.json()
 }
 
 export async function fetchTrends(days = 30): Promise<TrendResponse> {
-  const response = await fetch(`${API_BASE}/review/trends?days=${days}`)
+  const response = await fetch(`${API_BASE}/review/trends?days=${days}`, { headers: authHeaders() })
   if (!response.ok) throw new Error("获取趋势数据失败")
   return response.json()
 }
 
 export async function fetchSettingsStatus(): Promise<{ deepseek_configured: boolean; github_configured: boolean; deepseek_api_key?: string; github_token?: string }> {
-  const response = await fetch(`${API_BASE}/settings/status`)
+  const response = await fetch(`${API_BASE}/settings/status`, { headers: authHeaders() })
   if (!response.ok) throw new Error("获取设置状态失败")
   return response.json()
 }
@@ -286,7 +287,7 @@ export async function fetchSettingsStatus(): Promise<{ deepseek_configured: bool
 export async function updateSettings(data: { deepseek_api_key?: string; github_token?: string }): Promise<void> {
   const response = await fetch(`${API_BASE}/settings`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(data),
   })
   if (!response.ok) throw new Error("更新设置失败")

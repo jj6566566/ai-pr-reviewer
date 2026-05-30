@@ -80,9 +80,19 @@ async def github_webhook(
 
 async def _run_analysis_background(owner: str, repo: str, pr_number: int):
     logger.info("Background analysis started for %s/%s #%d", owner, repo, pr_number)
+
+    # Webhook 回调没有用户 OAuth token，回退使用环境变量 GITHUB_TOKEN
+    service_token = settings.GITHUB_TOKEN
+    if not service_token:
+        logger.warning(
+            "GITHUB_TOKEN 未配置，跳过 %s/%s #%d 的后台分析",
+            owner, repo, pr_number,
+        )
+        return
+
     try:
         request = AnalyzeRequest(owner=owner, repo=repo, pr_number=pr_number)
-        result = reviewer_service.analyze(request)
+        result = reviewer_service.analyze(request, token=service_token)
 
         async with async_session() as db:
             await save_analysis(db, result)
@@ -93,6 +103,7 @@ async def _run_analysis_background(owner: str, repo: str, pr_number: int):
             repo=repo,
             pr_number=pr_number,
             body=comment_body,
+            token=service_token,
         )
 
         logger.info(

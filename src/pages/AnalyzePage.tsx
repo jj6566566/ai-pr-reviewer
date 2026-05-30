@@ -41,6 +41,7 @@ import { analyzePR, analyzeBatch, analyzeBatchStream, analyzePRStream, submitFee
 import { useAuth } from "@/contexts/AuthContext"
 import RepoSelector from "@/components/RepoSelector"
 import PRList from "@/components/PRList"
+import ReviewChat from "@/components/ReviewChat"
 
 const severityIcons: Record<string, typeof Bug> = {
   critical: Bug,
@@ -931,6 +932,18 @@ export default function AnalyzePage() {
         </>
       )}
 
+      {result && result.analysis_id && (
+        <ReviewChat
+          analysisId={result.analysis_id}
+          repoOwner={result.pr_info.owner}
+          repoName={result.pr_info.repo}
+          prTitle={result.pr_info.title}
+          summary={result.summary}
+          riskItems={result.risk_items}
+          suggestions={result.suggestions}
+        />
+      )}
+
       {batchResult && (
         <>
           <div className="bg-[#131829] border border-[#1e2440] rounded-xl p-6 shadow-lg shadow-black/20">
@@ -1153,6 +1166,18 @@ export default function AnalyzePage() {
                       analysisId={detailPR.analysis_id}
                       onFeedbackChange={() => setFeedback({ ...feedback })} />
                   </div>
+
+                  {detailPR.analysis_id && (
+                    <ReviewChat
+                      analysisId={detailPR.analysis_id}
+                      repoOwner={detailPR.pr_info.owner}
+                      repoName={detailPR.pr_info.repo}
+                      prTitle={detailPR.pr_info.title}
+                      summary={detailPR.summary}
+                      riskItems={detailPR.risk_items}
+                      suggestions={detailPR.suggestions}
+                    />
+                  )}
                 </div>
               </div>
             ) : (
@@ -1257,6 +1282,18 @@ export default function AnalyzePage() {
                               </div>
                               <SuggestionListCompact suggestions={prResult.suggestions} limit={3} />
                             </div>
+                          )}
+
+                          {prResult.analysis_id && (
+                            <ReviewChat
+                              analysisId={prResult.analysis_id}
+                              repoOwner={prResult.pr_info.owner}
+                              repoName={prResult.pr_info.repo}
+                              prTitle={prResult.pr_info.title}
+                              summary={prResult.summary}
+                              riskItems={prResult.risk_items}
+                              suggestions={prResult.suggestions}
+                            />
                           )}
                         </div>
                       )}

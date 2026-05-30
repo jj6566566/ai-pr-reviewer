@@ -21,3 +21,9 @@ export async function fetchRepoPulls(owner: string, repo: string): Promise<PullR
   if (!res.ok) throw new Error("获取 PR 列表失败")
   return res.json()
 }
+
+export async function fetchNotifications(): Promise<import("@/types/auth").Notification[]> {
+  const res = await fetch(`${API_BASE}/github/notifications`, { headers: authHeaders() })
+  if (!res.ok) throw new Error("获取通知列表失败")
+  return res.json()
+}
