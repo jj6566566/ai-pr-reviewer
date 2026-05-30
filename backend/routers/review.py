@@ -104,8 +104,27 @@ async def analyze_pr(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)
     return response
 
 
+import asyncio
+
 @router.post("/analyze-stream")
 async def analyze_pr_stream(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)):
+    async def background_task(response: AnalyzeResponse, db_session):
+        try:
+            await save_analysis(db_session, response)
+        except Exception as e:
+            logger.error("保存分析结果失败: %s", e)
+        
+        try:
+            comment_body = reviewer_service._format_review_comment(response)
+            github_service.post_pr_review(
+                owner=request.owner,
+                repo=request.repo,
+                pr_number=request.pr_number,
+                body=comment_body,
+            )
+        except Exception as e:
+            logger.error("发布 PR 评论失败: %s", e)
+    
     async def generate():
         response_data = None
         try:
@@ -116,28 +135,12 @@ async def analyze_pr_stream(request: AnalyzeRequest, db: AsyncSession = Depends(
             
             if response_data:
                 response = AnalyzeResponse(**response_data)
-                try:
-                    await save_analysis(db, response)
-                except Exception as e:
-                    logger.error("\u4fdd\u5b58\u5206\u6790\u7ed3\u679c\u5931\u8d25: %s", e)
-                
-                try:
-                    comment_body = reviewer_service._format_review_comment(response)
-                    github_service.post_pr_review(
-                        owner=request.owner,
-                        repo=request.repo,
-                        pr_number=request.pr_number,
-                        body=comment_body,
-                    )
-                    yield "event: comment_posted\ndata: {}\n\n".format(json.dumps({"success": True}))
-                except Exception as e:
-                    logger.error("\u53d1\u5e03 PR \u8bc4\u8bba\u5931\u8d25: %s", e)
-                    yield "event: comment_posted\ndata: {}\n\n".format(json.dumps({"success": False, "error": str(e)}))
+                asyncio.create_task(background_task(response, db))
         except httpx.HTTPStatusError as e:
-            yield "event: error\ndata: {}\n\n".format(json.dumps({"error": "GitHub API \u9519\u8bef: {}".format(e.response.text)}))
+            yield "event: error\ndata: {}\n\n".format(json.dumps({"error": "GitHub API 错误: {}".format(e.response.text)}))
         except Exception as e:
-            logger.error("\u6d41\u5f0f\u5206\u6790\u5931\u8d25: %s", e)
-            yield "event: error\ndata: {}\n\n".format(json.dumps({"error": "\u5206\u6790\u5931\u8d25: {}".format(str(e))}))
+            logger.error("流式分析失败: %s", e)
+            yield "event: error\ndata: {}\n\n".format(json.dumps({"error": "分析失败: {}".format(str(e))}))
 
     return StreamingResponse(
         generate(),
@@ -155,6 +158,28 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, db: AsyncSession = 
     prs = request.prs
     if len(prs) < 2 or len(prs) > 10:
         raise HTTPException(status_code=400, detail="批量分析需要 2-10 个 PR")
+
+    async def batch_background_task(results: list[AnalyzeResponse], db_session):
+        # 保存所有分析结果
+        for r in results:
+            try:
+                await save_analysis(db_session, r)
+            except Exception as e:
+                logger.error("保存分析结果失败 (PR #%s): %s", r.pr_info.number, e)
+
+        # 为每个 PR 单独发布评论（相互独立，一个失败不影响其他）
+        for r in results:
+            try:
+                comment_body = reviewer_service._format_review_comment(r)
+                github_service.post_pr_review(
+                    owner=r.pr_info.owner,
+                    repo=r.pr_info.repo,
+                    pr_number=r.pr_info.number,
+                    body=comment_body,
+                )
+                logger.info("成功发布 PR 评论 (PR #%s)", r.pr_info.number)
+            except Exception as e:
+                logger.error("发布 PR 评论失败 (PR #%s): %s", r.pr_info.number, e)
 
     async def generate():
         total = len(prs)
@@ -191,30 +216,6 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, db: AsyncSession = 
                     json.dumps({"pr_number": item.pr_number, "error": str(e)})
                 )
 
-        try:
-            for r in results:
-                await save_analysis(db, r)
-        except Exception as e:
-            logger.error("批量保存分析结果失败: %s", e)
-
-        try:
-            for r in results:
-                comment_body = reviewer_service._format_review_comment(r)
-                github_service.post_pr_review(
-                    owner=r.owner,
-                    repo=r.repo,
-                    pr_number=r.pr_number,
-                    body=comment_body,
-                )
-                yield "event: batch_comment_posted\ndata: {}\n\n".format(
-                    json.dumps({"pr_number": r.pr_number, "success": True})
-                )
-        except Exception as e:
-            logger.error("批量发布 PR 评论失败: %s", e)
-            yield "event: batch_comment_posted\ndata: {}\n\n".format(
-                json.dumps({"success": False, "error": str(e)})
-            )
-
         overview = _compute_batch_overview(results)
         dup_result = None
         try:
@@ -230,6 +231,8 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, db: AsyncSession = 
         yield "event: batch_complete\ndata: {}\n\n".format(
             json.dumps(batch_response.model_dump(mode="json"), ensure_ascii=False)
         )
+
+        asyncio.create_task(batch_background_task(results, db))
 
     return StreamingResponse(
         generate(),
