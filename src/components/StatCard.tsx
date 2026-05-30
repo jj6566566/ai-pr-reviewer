@@ -4,7 +4,7 @@ interface StatCardProps {
   icon: LucideIcon
   label: string
   value: string | number
-  color: "teal" | "purple" | "amber" | "blue"
+  color: "teal" | "purple" | "amber" | "blue" | "red"
   delay: number
 }
 
@@ -32,6 +32,12 @@ const colorMap = {
     text: "text-[#3b82f6]", 
     glow: "#3b82f6",
     border: "group-hover:border-[#3b82f6]/40"
+  },
+  red: { 
+    bg: "bg-[#ef4444]/10", 
+    text: "text-[#ef4444]", 
+    glow: "#ef4444",
+    border: "group-hover:border-[#ef4444]/40"
   },
 }
 

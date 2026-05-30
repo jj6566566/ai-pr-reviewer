@@ -27,6 +27,7 @@ from backend.schemas.review import (
     CustomRuleUpdate,
     DuplicateRiskPatternItem,
     FeedbackRequest,
+    InsightsResponse,
     FileInfo,
     FileOverlapItem,
     PRInfoResponse,
@@ -46,6 +47,7 @@ from backend.store import (
     delete_rule,
     get_analysis_by_id,
     get_enabled_rules,
+    get_insights_data,
     get_recent_analyses,
     get_recent_analysis_by_pr,
     get_recent_analysis_by_pr_sync,
@@ -752,6 +754,16 @@ async def get_trend(
     )
 
     return TrendResponse(data_points=data_points, summary=summary)
+
+
+@router.get("/insights", response_model=InsightsResponse)
+async def get_insights(
+    owner: str = Query(None),
+    repo: str = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await get_insights_data(db, owner, repo)
+    return InsightsResponse(**data)
 
 
 # ---- Code Q&A SSE Endpoint ----
