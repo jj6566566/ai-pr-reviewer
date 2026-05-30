@@ -8,6 +8,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dataclasses import asdict as dataclass_asdict
+
 from backend.core.database import get_db
 from backend.models.pr_analysis import PRAnalysis
 from backend.services.auth import require_user, decrypt_token
@@ -39,11 +41,14 @@ from backend.services.github import github_service
 from backend.services.reviewer import reviewer_service
 from backend.services.rule_engine import DiffFile, run_rules
 from backend.store import (
+    analysis_to_response,
     create_rule,
     delete_rule,
     get_analysis_by_id,
     get_enabled_rules,
     get_recent_analyses,
+    get_recent_analysis_by_pr,
+    get_recent_analysis_by_pr_sync,
     get_rule_by_id,
     get_trends,
     list_rules,
@@ -60,6 +65,13 @@ logger = logging.getLogger(__name__)
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_pr(request: AnalyzeRequest, user: User = Depends(require_user), db: AsyncSession = Depends(get_db)):
     token = decrypt_token(user.access_token)
+
+    cached = await get_recent_analysis_by_pr(db, request.owner, request.repo, request.pr_number)
+    if cached:
+        logger.info("缓存命中: %s/%s #%d (分析于 %s)", request.owner, request.repo, request.pr_number, cached.created_at)
+        response = analysis_to_response(cached)
+        return response
+
     try:
         response = reviewer_service.analyze(request, token=token)
     except httpx.HTTPStatusError as e:
@@ -115,13 +127,23 @@ async def analyze_pr(request: AnalyzeRequest, user: User = Depends(require_user)
 import asyncio
 
 @router.post("/analyze-stream")
-async def analyze_pr_stream(request: AnalyzeRequest, user: User = Depends(require_user)):
+async def analyze_pr_stream(request: AnalyzeRequest, user: User = Depends(require_user), db: AsyncSession = Depends(get_db)):
     """Single-PR streaming analysis via SSE.
 
     Uses a *sync* generator so that every ``yield`` is flushed immediately
     to the client -- no async-generator buffering.
     """
     token = decrypt_token(user.access_token)
+
+    cached = await get_recent_analysis_by_pr(db, request.owner, request.repo, request.pr_number)
+    if cached:
+        logger.info("缓存命中(stream): %s/%s #%d (分析于 %s)", request.owner, request.repo, request.pr_number, cached.created_at)
+        resp = analysis_to_response(cached)
+
+        def cached_generate():
+            yield f"event: complete\ndata: {json.dumps(resp.model_dump(mode='json'), ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(cached_generate(), media_type="text/event-stream")
 
     def generate():
         response_obj = None
@@ -175,11 +197,10 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, user: User = Depend
     if len(prs) < 2 or len(prs) > 10:
         raise HTTPException(status_code=400, detail="批量分析需要 2-10 个 PR")
 
-    async def batch_background_task(results: list[AnalyzeResponse], db_session):
-        # 保存所有分析结果
+    async def batch_background_task(results: list[AnalyzeResponse]):
         for r in results:
             try:
-                await save_analysis(db_session, r)
+                save_analysis_sync(r)
             except Exception as e:
                 logger.error("保存分析结果失败 (PR #%s): %s", r.pr_info.number, e)
 
@@ -209,6 +230,18 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, user: User = Depend
             )
             try:
                 analyze_req = AnalyzeRequest(owner=item.owner, repo=item.repo, pr_number=item.pr_number)
+
+                cached = get_recent_analysis_by_pr_sync(item.owner, item.repo, item.pr_number)
+                if cached:
+                    logger.info("批量缓存命中: %s/%s #%d", item.owner, item.repo, item.pr_number)
+                    resp = analysis_to_response(cached)
+                    resp_data = resp.model_dump(mode="json")
+                    results.append(resp)
+                    yield "event: batch_pr_complete\ndata: {}\n\n".format(
+                        json.dumps({"current": idx + 1, "total": total, "pr_number": item.pr_number, "result": resp_data, "cached": True})
+                    )
+                    continue
+
                 for event in reviewer_service.analyze_stream(analyze_req, token=token):
                     if event["event"] == "progress":
                         yield "event: batch_progress\ndata: {}\n\n".format(
@@ -222,7 +255,7 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, user: User = Depend
                         response_data = event["data"]
                         response = AnalyzeResponse(**response_data)
                         try:
-                            saved = await save_analysis(db, response)
+                            saved = save_analysis_sync(response)
                             response.analysis_id = saved.id
                             response_data["analysis_id"] = saved.id
                         except Exception as e:
@@ -248,7 +281,7 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, user: User = Depend
 
         overview = _compute_batch_overview(results, dup_result_obj)
 
-        dup_result_raw = dup_result_obj.model_dump(mode="json") if dup_result_obj else None
+        dup_result_raw = dataclass_asdict(dup_result_obj) if dup_result_obj else None
 
         batch_response = BatchAnalyzeResponse(
             results=results, overview=overview,
@@ -258,7 +291,7 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, user: User = Depend
             json.dumps(batch_response.model_dump(mode="json"), ensure_ascii=False)
         )
 
-        asyncio.create_task(batch_background_task(results, db))
+        asyncio.create_task(batch_background_task(results))
 
     return StreamingResponse(
         generate(),
@@ -327,7 +360,12 @@ async def batch_analyze(request: BatchAnalyzeRequest, user: User = Depends(requi
             pr_number=item.pr_number,
         )
         try:
-            response = reviewer_service.analyze(analyze_req, token=token)
+            cached = await get_recent_analysis_by_pr(db, item.owner, item.repo, item.pr_number)
+            if cached:
+                logger.info("批量缓存命中(sync): %s/%s #%d", item.owner, item.repo, item.pr_number)
+                response = analysis_to_response(cached)
+            else:
+                response = reviewer_service.analyze(analyze_req, token=token)
         except httpx.HTTPStatusError as e:
             raise HTTPException(
                 status_code=400,

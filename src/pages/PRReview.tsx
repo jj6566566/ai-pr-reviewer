@@ -448,6 +448,7 @@ export default function PRReview() {
                             <DiffViewer
                               diffContent={detail.diff_content}
                               riskItems={detail.risk_items}
+                              defaultCollapsed
                             />
                           </div>
                         )}
