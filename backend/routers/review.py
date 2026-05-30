@@ -108,6 +108,8 @@ import asyncio
 
 @router.post("/analyze-stream")
 async def analyze_pr_stream(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)):
+    response_data = None
+    
     async def background_task(response: AnalyzeResponse, db_session):
         try:
             await save_analysis(db_session, response)
@@ -125,23 +127,29 @@ async def analyze_pr_stream(request: AnalyzeRequest, db: AsyncSession = Depends(
         except Exception as e:
             logger.error("发布 PR 评论失败: %s", e)
     
-    async def generate():
-        response_data = None
+    def generate():
+        nonlocal response_data
         try:
             for event in reviewer_service.analyze_stream(request):
                 if event["event"] == "complete":
                     response_data = event["data"]
-                yield "event: {}\ndata: {}\n\n".format(event["event"], json.dumps(event["data"], ensure_ascii=False))
-            
-            if response_data:
-                response = AnalyzeResponse(**response_data)
-                asyncio.create_task(background_task(response, db))
+                yield f"event: {event['event']}\ndata: {json.dumps(event['data'], ensure_ascii=False)}\n\n"
         except httpx.HTTPStatusError as e:
-            yield "event: error\ndata: {}\n\n".format(json.dumps({"error": "GitHub API 错误: {}".format(e.response.text)}))
+            yield f"event: error\ndata: {json.dumps({'error': f'GitHub API 错误: {e.response.text}'})}\n\n"
         except Exception as e:
             logger.error("流式分析失败: %s", e)
-            yield "event: error\ndata: {}\n\n".format(json.dumps({"error": "分析失败: {}".format(str(e))}))
-
+            yield f"event: error\ndata: {json.dumps({'error': f'分析失败: {str(e)}'})}\n\n"
+    
+    async def start_background():
+        nonlocal response_data
+        while response_data is None:
+            await asyncio.sleep(0.1)
+        if response_data:
+            response = AnalyzeResponse(**response_data)
+            asyncio.create_task(background_task(response, db))
+    
+    asyncio.create_task(start_background())
+    
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
@@ -149,6 +157,8 @@ async def analyze_pr_stream(request: AnalyzeRequest, db: AsyncSession = Depends(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "Transfer-Encoding": "chunked",
+            "Content-Type": "text/event-stream; charset=utf-8",
         },
     )
 
