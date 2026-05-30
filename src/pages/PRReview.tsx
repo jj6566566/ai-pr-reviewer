@@ -110,7 +110,6 @@ export default function PRReview() {
         next.delete(id)
         return next
       })
-      })
     } finally {
       setLoadingIds((prev) => {
         const next = new Set(prev)
