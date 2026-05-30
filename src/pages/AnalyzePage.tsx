@@ -937,10 +937,16 @@ export default function AnalyzePage() {
               })}
             </div>
 
-            <div className="p-5 max-h-[600px] overflow-y-auto">
-              {activeTab === "risks" && <RiskList risks={sortedRisks} feedback={feedback} analysisId={result.analysis_id} onFeedbackChange={() => setFeedback({ ...feedback })} />}
-              {activeTab === "suggestions" && <SuggestionList suggestions={result.suggestions} feedback={feedback} analysisId={result.analysis_id} onFeedbackChange={() => setFeedback({ ...feedback })} />}
-              {activeTab === "rules" && <RuleMatchesView matches={result.rule_matches} />}
+            <div className="p-5 h-[500px] overflow-y-auto">
+              <div className={activeTab === "risks" ? "" : "hidden"}>
+                <RiskList risks={sortedRisks} feedback={feedback} analysisId={result.analysis_id} onFeedbackChange={() => setFeedback({ ...feedback })} />
+              </div>
+              <div className={activeTab === "suggestions" ? "" : "hidden"}>
+                <SuggestionList suggestions={result.suggestions} feedback={feedback} analysisId={result.analysis_id} onFeedbackChange={() => setFeedback({ ...feedback })} />
+              </div>
+              <div className={activeTab === "rules" ? "" : "hidden"}>
+                <RuleMatchesView matches={result.rule_matches} />
+              </div>
             </div>
           </div>
         </>
