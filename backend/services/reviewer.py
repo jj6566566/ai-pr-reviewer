@@ -2,11 +2,11 @@ import json
 import re
 from typing import List, Optional, Tuple
 
-from backend.schemas.review import AnalyzeRequest, AnalyzeResponse, Discrepancy, FileInfo, IntentCheck, PRInfoResponse, RiskItem, Suggestion
+from backend.schemas.review import AnalyzeRequest, AnalyzeResponse, Discrepancy, FileInfo, IntentCheck, PRInfoResponse, RiskClusterItem, RiskItem, Suggestion
 from backend.services.diff_processor import DiffContext, diff_processor
 from backend.services.github import PRInfo, github_service
 from backend.services.llm import LLMClient, llm_client
-from backend.services.risk_scorer import RiskResult, risk_scorer
+from backend.services.risk_scorer import RiskCluster, RiskResult, risk_scorer
 
 SYSTEM_PROMPT = """你是一位资深代码评审专家。请对提供的 Pull Request 进行专业分析，输出 JSON 格式结果。
 
@@ -108,11 +108,13 @@ class ReviewerService:
             validated_suggestions.append(Suggestion(**s))
 
         risk_result = risk_scorer.score(
-            risk_items=analysis.get("risk_items", []),
+            risk_items=risk_items_raw,
             files_changed=pr_info.files_changed,
             additions=pr_info.additions,
             deletions=pr_info.deletions,
         )
+
+        risk_clusters = risk_scorer.cluster_risks(risk_items_raw)
 
         files_response = [
             FileInfo(
@@ -157,6 +159,13 @@ class ReviewerService:
             risk_level=risk_result.level,
             estimated_review_minutes=risk_result.estimated_minutes,
             intent_check=intent_check,
+            risk_clusters=[RiskClusterItem(
+                category=c.category,
+                label=c.label,
+                risk_indices=c.risk_indices,
+                dominant_severity=c.dominant_severity,
+                count=c.count,
+            ) for c in risk_clusters],
         )
 
     def _calculate_confidence(self, risk_item: dict, pr_info: PRInfo) -> float:

@@ -79,6 +79,7 @@ class AnalyzeResponse(BaseModel):
     rule_matches: list["RuleMatch"] = []
     analysis_id: Optional[int] = None
     intent_check: Optional[IntentCheck] = None
+    risk_clusters: list["RiskClusterItem"] = []
 
 
 class RuleMatch(BaseModel):
@@ -89,6 +90,14 @@ class RuleMatch(BaseModel):
     line: int
     matched_text: str
     suggestion: Optional[str] = None
+
+
+class RiskClusterItem(BaseModel):
+    category: str
+    label: str
+    risk_indices: list[int] = []
+    dominant_severity: str = "medium"
+    count: int = 0
 
 
 class BatchAnalyzeItem(BaseModel):
@@ -115,6 +124,8 @@ class BatchOverview(BaseModel):
     highest_risk_pr: Optional[BatchRiskCard]
     risk_distribution: dict
     top_risks: list[str]
+    risk_amplification: int = 0
+    amplification_reason: str = ""
 
 
 class FileOverlapItem(BaseModel):

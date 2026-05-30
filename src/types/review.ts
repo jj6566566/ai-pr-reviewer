@@ -74,6 +74,15 @@ export interface AnalyzeResponse {
   estimated_review_minutes: number
   analysis_id?: number
   intent_check?: IntentCheck | null
+  risk_clusters?: RiskClusterItem[]
+}
+
+export interface RiskClusterItem {
+  category: string
+  label: string
+  risk_indices: number[]
+  dominant_severity: string
+  count: number
 }
 
 export interface IntentCheck {
@@ -191,6 +200,8 @@ export interface BatchOverview {
   } | null
   risk_distribution: Record<string, number>
   top_risks: string[]
+  risk_amplification?: number
+  amplification_reason?: string
 }
 
 export interface BatchAnalyzeResponse {
