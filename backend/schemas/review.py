@@ -52,6 +52,21 @@ class Suggestion(BaseModel):
     confidence: Optional[float] = None
 
 
+class Discrepancy(BaseModel):
+    type: str = Field(..., description="不一致类型: scope_drift | hidden_breaking | missing_desc | unrelated_file")
+    description: str
+    file: str = ""
+    severity: str = "medium"
+
+
+class IntentCheck(BaseModel):
+    declared_intent: str = ""
+    actual_scope: str = ""
+    consistency_score: int = Field(100, description="意图一致性评分 0-100, 100=完全一致")
+    verdict: str = Field("match", description="判定: match | minor_deviation | major_deviation")
+    discrepancies: list[Discrepancy] = []
+
+
 class AnalyzeResponse(BaseModel):
     pr_info: PRInfoResponse
     summary: str = ""
@@ -63,6 +78,7 @@ class AnalyzeResponse(BaseModel):
     context_coverage: Optional[float] = None
     rule_matches: list["RuleMatch"] = []
     analysis_id: Optional[int] = None
+    intent_check: Optional[IntentCheck] = None
 
 
 class RuleMatch(BaseModel):

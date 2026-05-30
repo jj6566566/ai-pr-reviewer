@@ -51,6 +51,7 @@ async def save_analysis(db: AsyncSession, response: AnalyzeResponse) -> PRAnalys
         estimated_review_minutes=response.estimated_review_minutes,
         status="completed",
         diff_content=pr_info.diff_content,
+        intent_check=json.dumps(response.intent_check.model_dump(mode="json")) if response.intent_check else None,
     )
     db.add(analysis)
     await db.commit()
@@ -96,6 +97,7 @@ def save_analysis_sync(response: AnalyzeResponse) -> PRAnalysis:
         estimated_review_minutes=response.estimated_review_minutes,
         status="completed",
         diff_content=pr_info.diff_content,
+        intent_check=json.dumps(response.intent_check.model_dump(mode="json")) if response.intent_check else None,
     )
 
     with SyncSession() as session:

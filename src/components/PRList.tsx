@@ -35,7 +35,12 @@ export default function PRList({ owner, repo, onSelectPR, multiSelect = false, s
     setLoading(true)
     fetchRepoPulls(owner, repo)
       .then((data) => {
-        if (!cancelled.current) setPrs(data)
+        if (!cancelled.current) {
+          const sorted = [...data].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+          setPrs(sorted)
+        }
       })
       .catch(() => {
         if (!cancelled.current) setPrs([])
