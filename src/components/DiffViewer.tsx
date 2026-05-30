@@ -123,17 +123,27 @@ export default function DiffViewer({
   riskItems,
   highlightedRiskIdx,
   onRiskClick,
+  defaultCollapsed = false,
 }: {
   diffContent: string
   riskItems: RiskItem[]
   highlightedRiskIdx?: number | null
   onRiskClick?: (idx: number) => void
+  defaultCollapsed?: boolean
 }) {
   const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(new Set())
   const scrollRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const initialized = useRef(false)
 
   const sections = useMemo(() => parseDiff(diffContent, riskItems), [diffContent, riskItems])
   const totalRisks = sections.reduce((s, f) => s + f.riskCount, 0)
+
+  useEffect(() => {
+    if (defaultCollapsed && !initialized.current && sections.length > 0) {
+      initialized.current = true
+      setCollapsedFiles(new Set(sections.map((s) => s.filename)))
+    }
+  }, [defaultCollapsed, sections])
 
   useEffect(() => {
     if (highlightedRiskIdx != null && riskItems[highlightedRiskIdx]) {

@@ -44,7 +44,6 @@ import PRList from "@/components/PRList"
 import ReviewChat from "@/components/ReviewChat"
 import DiffViewer from "@/components/DiffViewer"
 import IntentCheckCard from "@/components/IntentCheckCard"
-import PRReview from "@/pages/PRReview"
 
 const severityIcons: Record<string, typeof Bug> = {
   critical: Bug,
@@ -990,6 +989,7 @@ export default function AnalyzePage() {
                   diffContent={result.pr_info.diff_content}
                   riskItems={result.risk_items}
                   highlightedRiskIdx={highlightedRiskIdx}
+                  defaultCollapsed
                   onRiskClick={(idx) => {
                     setHighlightedRiskIdx(idx)
                     setActiveTab("risks")
@@ -1230,6 +1230,14 @@ export default function AnalyzePage() {
                     </div>
                   )}
 
+                  {detailPR.pr_info.diff_content && (
+                    <DiffViewer
+                      diffContent={detailPR.pr_info.diff_content}
+                      riskItems={detailPR.risk_items}
+                      defaultCollapsed
+                    />
+                  )}
+
                   <div>
                     <p className="text-sm font-semibold text-[#ef4444] mb-3">
                       风险项 ({detailPR.risk_items.length})
@@ -1332,6 +1340,13 @@ export default function AnalyzePage() {
                               <p className="text-sm text-[#e4e8f1] leading-relaxed">{prResult.summary}</p>
                             </div>
                           )}
+                          {prResult.pr_info.diff_content && (
+                            <DiffViewer
+                              diffContent={prResult.pr_info.diff_content}
+                              riskItems={prResult.risk_items}
+                              defaultCollapsed
+                            />
+                          )}
                           {prResult.intent_check && (
                             <IntentCheckCard data={prResult.intent_check} />
                           )}
@@ -1390,10 +1405,6 @@ export default function AnalyzePage() {
                 })}
               </>
             )}
-          </div>
-
-          <div className="mt-8 pt-8 border-t border-[#1e2440]">
-            <PRReview />
           </div>
         </>
       )}

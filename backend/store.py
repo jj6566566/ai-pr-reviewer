@@ -13,6 +13,12 @@ from backend.schemas.review import (
     AnalyzeResponse,
     CustomRuleCreate,
     CustomRuleUpdate,
+    Discrepancy,
+    FileInfo,
+    IntentCheck,
+    PRInfoResponse,
+    RiskItem,
+    Suggestion,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,6 +129,96 @@ async def get_recent_analyses(db: AsyncSession, limit: int = 20) -> list[PRAnaly
 
 async def get_analysis_by_id(db: AsyncSession, analysis_id: int) -> Optional[PRAnalysis]:
     stmt = select(PRAnalysis).where(PRAnalysis.id == analysis_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+def get_recent_analysis_by_pr_sync(owner: str, repo: str, pr_number: int, hours: int = 24) -> Optional[PRAnalysis]:
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    stmt = (
+        select(PRAnalysis)
+        .where(
+            PRAnalysis.repo_owner == owner,
+            PRAnalysis.repo_name == repo,
+            PRAnalysis.pr_number == pr_number,
+            PRAnalysis.status == "completed",
+            PRAnalysis.created_at >= cutoff,
+        )
+        .order_by(PRAnalysis.created_at.desc())
+        .limit(1)
+    )
+    with SyncSession() as session:
+        return session.execute(stmt).scalar_one_or_none()
+
+
+def analysis_to_response(analysis: PRAnalysis) -> AnalyzeResponse:
+    risk_items = []
+    if analysis.risk_items:
+        try:
+            items_raw = json.loads(analysis.risk_items)
+            risk_items = [RiskItem(**item) for item in items_raw]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    suggestions = []
+    if analysis.suggestions:
+        try:
+            sugg_raw = json.loads(analysis.suggestions)
+            suggestions = [Suggestion(**item) for item in sugg_raw]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    intent_check = None
+    if analysis.intent_check:
+        try:
+            intent_raw = json.loads(analysis.intent_check)
+            intent_check = IntentCheck(**intent_raw)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return AnalyzeResponse(
+        pr_info=PRInfoResponse(
+            owner=analysis.repo_owner,
+            repo=analysis.repo_name,
+            number=analysis.pr_number,
+            title=analysis.pr_title or "",
+            description=analysis.pr_description or "",
+            author=analysis.author or "",
+            base_branch=analysis.base_branch or "",
+            head_branch=analysis.head_branch or "",
+            files_changed=analysis.files_changed,
+            additions=analysis.additions,
+            deletions=analysis.deletions,
+            files=[],
+            diff_content=analysis.diff_content or "",
+        ),
+        summary=analysis.summary or "",
+        risk_items=risk_items,
+        suggestions=suggestions,
+        risk_score=analysis.risk_score,
+        risk_level=analysis.risk_level,
+        estimated_review_minutes=analysis.estimated_review_minutes,
+        analysis_id=analysis.id,
+        intent_check=intent_check,
+    )
+
+
+async def get_recent_analysis_by_pr(
+    db: AsyncSession, owner: str, repo: str, pr_number: int, hours: int = 24
+) -> Optional[PRAnalysis]:
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    stmt = (
+        select(PRAnalysis)
+        .where(
+            PRAnalysis.repo_owner == owner,
+            PRAnalysis.repo_name == repo,
+            PRAnalysis.pr_number == pr_number,
+            PRAnalysis.status == "completed",
+            PRAnalysis.created_at >= cutoff,
+        )
+        .order_by(PRAnalysis.created_at.desc())
+        .limit(1)
+    )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
