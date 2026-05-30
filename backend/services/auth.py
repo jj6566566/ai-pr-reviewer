@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import jwt
 from cryptography.fernet import Fernet
@@ -114,9 +113,9 @@ def verify_jwt(token: str) -> dict:
 
 async def get_current_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
     db: AsyncSession = Depends(get_db),
-) -> User | None:
+) -> Optional[User]:
     """从请求中解析当前登录用户。
 
     优先从 Authorization: Bearer <token> 头中提取 JWT；
@@ -126,17 +125,17 @@ async def get_current_user(
     ----------
     request : Request
         FastAPI 请求对象。
-    credentials : HTTPAuthorizationCredentials | None
+    credentials : Optional[HTTPAuthorizationCredentials]
         Bearer 认证凭证。
     db : AsyncSession
         数据库会话。
 
     Returns
     -------
-    User | None
+    Optional[User]
         当前用户实例；未认证时返回 None。
     """
-    token: str | None = None
+    token: Optional[str] = None
 
     # 优先从 Bearer header 读取
     if credentials is not None:
@@ -157,13 +156,13 @@ async def get_current_user(
 
 
 async def require_user(
-    user: User | None = Depends(get_current_user),
+    user: Optional[User] = Depends(get_current_user),
 ) -> User:
     """强制要求登录态，未认证时抛出 401。
 
     Parameters
     ----------
-    user : User | None
+    user : Optional[User]
         由 get_current_user 解析的用户。
 
     Returns

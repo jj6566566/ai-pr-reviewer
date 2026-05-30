@@ -2,7 +2,7 @@ import type { User } from "@/types/auth"
 
 const API_BASE = "/api"
 
-function authHeaders(): Record<string, string> {
+export function authHeaders(): Record<string, string> {
   const token = localStorage.getItem("pr_review_token")
   if (token) return { Authorization: `Bearer ${token}` }
   return {}

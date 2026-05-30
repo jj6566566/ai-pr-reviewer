@@ -5,9 +5,13 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
+from backend.models.pr_analysis import PRAnalysis
+from backend.services.auth import require_user, decrypt_token
+from backend.models.user import User
 from backend.schemas.review import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -44,6 +48,7 @@ from backend.store import (
     get_trends,
     list_rules,
     save_analysis,
+    save_analysis_sync,
     update_rule,
 )
 
@@ -53,9 +58,10 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze_pr(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)):
+async def analyze_pr(request: AnalyzeRequest, user: User = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    token = decrypt_token(user.access_token)
     try:
-        response = reviewer_service.analyze(request)
+        response = reviewer_service.analyze(request, token=token)
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=400, detail="GitHub API \u9519\u8bef: {}".format(e.response.text))
     except Exception as e:
@@ -97,6 +103,7 @@ async def analyze_pr(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)
             repo=request.repo,
             pr_number=request.pr_number,
             body=comment_body,
+            token=token,
         )
     except Exception as e:
         logger.error("\u53d1\u5e03 PR \u8bc4\u8bba\u5931\u8d25: %s", e)
@@ -107,49 +114,46 @@ async def analyze_pr(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)
 import asyncio
 
 @router.post("/analyze-stream")
-async def analyze_pr_stream(request: AnalyzeRequest, db: AsyncSession = Depends(get_db)):
-    response_data = None
-    
-    async def background_task(response: AnalyzeResponse, db_session):
-        try:
-            await save_analysis(db_session, response)
-        except Exception as e:
-            logger.error("保存分析结果失败: %s", e)
-        
-        try:
-            comment_body = reviewer_service._format_review_comment(response)
-            github_service.post_pr_review(
-                owner=request.owner,
-                repo=request.repo,
-                pr_number=request.pr_number,
-                body=comment_body,
-            )
-        except Exception as e:
-            logger.error("发布 PR 评论失败: %s", e)
-    
+async def analyze_pr_stream(request: AnalyzeRequest, user: User = Depends(require_user)):
+    """Single-PR streaming analysis via SSE.
+
+    Uses a *sync* generator so that every ``yield`` is flushed immediately
+    to the client -- no async-generator buffering.
+    """
+    token = decrypt_token(user.access_token)
+
     def generate():
-        nonlocal response_data
+        response_obj = None
         try:
-            for event in reviewer_service.analyze_stream(request):
+            for event in reviewer_service.analyze_stream(request, token=token):
                 if event["event"] == "complete":
-                    response_data = event["data"]
+                    response_obj = AnalyzeResponse(**event["data"])
+                    try:
+                        saved = save_analysis_sync(response_obj)
+                        response_obj.analysis_id = saved.id
+                    except Exception as e:
+                        logger.error("保存分析结果失败: %s", e)
+                    event["data"]["analysis_id"] = response_obj.analysis_id
                 yield f"event: {event['event']}\ndata: {json.dumps(event['data'], ensure_ascii=False)}\n\n"
         except httpx.HTTPStatusError as e:
             yield f"event: error\ndata: {json.dumps({'error': f'GitHub API 错误: {e.response.text}'})}\n\n"
         except Exception as e:
             logger.error("流式分析失败: %s", e)
             yield f"event: error\ndata: {json.dumps({'error': f'分析失败: {str(e)}'})}\n\n"
-    
-    async def start_background():
-        nonlocal response_data
-        while response_data is None:
-            await asyncio.sleep(0.1)
-        if response_data:
-            response = AnalyzeResponse(**response_data)
-            asyncio.create_task(background_task(response, db))
-    
-    asyncio.create_task(start_background())
-    
+
+        if response_obj and request.post_comment:
+            try:
+                comment_body = reviewer_service._format_review_comment(response_obj)
+                github_service.post_pr_review(
+                    owner=request.owner,
+                    repo=request.repo,
+                    pr_number=request.pr_number,
+                    body=comment_body,
+                    token=token,
+                )
+            except Exception as e:
+                logger.error("发布 PR 评论失败: %s", e)
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
@@ -164,7 +168,8 @@ async def analyze_pr_stream(request: AnalyzeRequest, db: AsyncSession = Depends(
 
 
 @router.post("/batch-stream")
-async def batch_analyze_stream(request: BatchAnalyzeRequest, db: AsyncSession = Depends(get_db)):
+async def batch_analyze_stream(request: BatchAnalyzeRequest, user: User = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    token = decrypt_token(user.access_token)
     prs = request.prs
     if len(prs) < 2 or len(prs) > 10:
         raise HTTPException(status_code=400, detail="批量分析需要 2-10 个 PR")
@@ -186,6 +191,7 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, db: AsyncSession = 
                     repo=r.pr_info.repo,
                     pr_number=r.pr_info.number,
                     body=comment_body,
+                    token=token,
                 )
                 logger.info("成功发布 PR 评论 (PR #%s)", r.pr_info.number)
             except Exception as e:
@@ -201,7 +207,7 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, db: AsyncSession = 
             )
             try:
                 analyze_req = AnalyzeRequest(owner=item.owner, repo=item.repo, pr_number=item.pr_number)
-                for event in reviewer_service.analyze_stream(analyze_req):
+                for event in reviewer_service.analyze_stream(analyze_req, token=token):
                     if event["event"] == "progress":
                         yield "event: batch_progress\ndata: {}\n\n".format(
                             json.dumps({"current": idx + 1, "total": total, "pr_number": item.pr_number, "stage": "fetching"})
@@ -213,6 +219,12 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, db: AsyncSession = 
                     elif event["event"] == "complete":
                         response_data = event["data"]
                         response = AnalyzeResponse(**response_data)
+                        try:
+                            saved = await save_analysis(db, response)
+                            response.analysis_id = saved.id
+                            response_data["analysis_id"] = saved.id
+                        except Exception as e:
+                            logger.error("保存分析结果失败 (PR #%s): %s", item.pr_number, e)
                         results.append(response)
                         yield "event: batch_pr_complete\ndata: {}\n\n".format(
                             json.dumps({"current": idx + 1, "total": total, "pr_number": item.pr_number, "result": response_data})
@@ -252,12 +264,14 @@ async def batch_analyze_stream(request: BatchAnalyzeRequest, db: AsyncSession = 
 
 
 @router.get("/fetch")
-async def fetch_pr(owner: str, repo: str, pr_number: int):
+async def fetch_pr(owner: str, repo: str, pr_number: int, user: User = Depends(require_user)):
+    token = decrypt_token(user.access_token)
     try:
         pr_info = github_service.get_pr_info(
             owner=owner,
             repo=repo,
             pr_number=pr_number,
+            token=token,
         )
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=400, detail="GitHub API \u9519\u8bef: {}".format(e.response.text))
@@ -295,7 +309,8 @@ async def fetch_pr(owner: str, repo: str, pr_number: int):
 
 
 @router.post("/batch", response_model=BatchAnalyzeResponse)
-async def batch_analyze(request: BatchAnalyzeRequest, db: AsyncSession = Depends(get_db)):
+async def batch_analyze(request: BatchAnalyzeRequest, user: User = Depends(require_user), db: AsyncSession = Depends(get_db)):
+    token = decrypt_token(user.access_token)
     prs = request.prs
     if len(prs) < 2 or len(prs) > 10:
         raise HTTPException(status_code=400, detail="\u6279\u91cf\u5206\u6790\u9700\u8981 2-10 \u4e2a PR")
@@ -308,7 +323,7 @@ async def batch_analyze(request: BatchAnalyzeRequest, db: AsyncSession = Depends
             pr_number=item.pr_number,
         )
         try:
-            response = reviewer_service.analyze(analyze_req)
+            response = reviewer_service.analyze(analyze_req, token=token)
         except httpx.HTTPStatusError as e:
             raise HTTPException(
                 status_code=400,
@@ -420,7 +435,7 @@ def _compute_batch_overview(results: list) -> BatchOverview:
 
 @router.get("/history")
 async def list_history(
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -676,3 +691,138 @@ async def get_trend(
     )
 
     return TrendResponse(data_points=data_points, summary=summary)
+
+
+# ---- Code Q&A SSE Endpoint ----
+
+from pydantic import BaseModel
+
+
+class AskRequest(BaseModel):
+    question: str
+
+
+
+
+@router.post("/{analysis_id}/ask")
+async def ask_question(
+    analysis_id: int,
+    request: AskRequest,
+    user=Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream AI responses to user questions about a PR analysis via SSE."""
+    a = await get_analysis_by_id(db, analysis_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="\u5206\u6790\u8bb0\u5f55\u4e0d\u5b58\u5728")
+
+    # Parse stored JSON fields
+    risk_items = []
+    if a.risk_items:
+        try:
+            risk_items = json.loads(a.risk_items)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    suggestions = []
+    if a.suggestions:
+        try:
+            suggestions = json.loads(a.suggestions)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Build PR context string for the LLM
+    context_parts: list[str] = []
+    if a.pr_title:
+        context_parts.append("PR\u6807\u9898: {}".format(a.pr_title))
+    if a.repo_owner and a.repo_name:
+        context_parts.append("\u4ed3\u5e93: {}/{}".format(a.repo_owner, a.repo_name))
+    if a.summary:
+        context_parts.append("AI\u5206\u6790\u6458\u8981: {}".format(a.summary))
+    if risk_items:
+        context_parts.append("\u98ce\u9669\u9879: {}".format(json.dumps(risk_items, ensure_ascii=False)))
+    if suggestions:
+        context_parts.append("\u6539\u8fdb\u5efa\u8bae: {}".format(json.dumps(suggestions, ensure_ascii=False)))
+
+    context_str = "\n".join(context_parts)
+
+    system_prompt = (
+        "\u4f60\u662f\u4e00\u4e2a\u4e13\u4e1a\u7684\u4ee3\u7801\u8bc4\u5ba1\u4e13\u5bb6\u3002"
+        "\u7528\u6237\u6b63\u5728\u67e5\u770b\u4e00\u4e2a\u5df2\u7ecf\u5b8c\u6210AI\u5206\u6790\u7684Pull Request\uff0c"
+        "\u8bf7\u6839\u636e\u5df2\u77e5\u7684PR\u4e0a\u4e0b\u6587\u56de\u7b54\u7528\u6237\u7684\u95ee\u9898\u3002"
+        "\u56de\u7b54\u8981\u4e13\u4e1a\u3001\u7b80\u6d01\uff0c\u5fc5\u8981\u65f6\u7ed9\u51fa\u4ee3\u7801\u5c42\u9762\u7684\u5efa\u8bae\u3002"
+    )
+
+    user_prompt = (
+        "\u4ee5\u4e0b\u662f\u4f60\u9700\u8981\u4e86\u89e3\u7684\u8be5 PR \u7684\u4e0a\u4e0b\u6587\u4fe1\u606f\uff1a\n\n"
+        "{}\n\n"
+        "\u7528\u6237\u7684\u95ee\u9898\uff1a{}"
+    ).format(context_str, request.question)
+
+    from backend.services.llm import LLMClient, LLMModel
+
+    llm = LLMClient(model=LLMModel.DEEPSEEK)
+
+    def generate():
+        try:
+            for token in llm.chat_stream(system_prompt=system_prompt, user_message=user_prompt):
+                yield "data: {}\n\n".format(json.dumps({"token": token}, ensure_ascii=False))
+            yield "data: {}\n\n".format(json.dumps({"done": True}))
+        except Exception as e:
+            logger.error("Code Q&A failed: %s", e)
+            yield "data: {}\n\n".format(
+                json.dumps({"error": "\u95ee\u7b54\u5931\u8d25: {}".format(str(e))}, ensure_ascii=False)
+            )
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---- Repo Health Endpoint ----
+
+
+@router.get("/repo-health")
+async def get_repo_health(
+    user=Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return aggregated health metrics grouped by repository."""
+    stmt = (
+        select(
+            PRAnalysis.repo_owner,
+            PRAnalysis.repo_name,
+            func.count(PRAnalysis.id).label("total_prs"),
+            func.avg(PRAnalysis.risk_score).label("avg_risk_score"),
+            func.sum(case((PRAnalysis.risk_level == "critical", 1), else_=0)).label("critical_count"),
+            func.sum(case((PRAnalysis.risk_level == "high", 1), else_=0)).label("high_count"),
+            func.sum(case((PRAnalysis.risk_level == "medium", 1), else_=0)).label("medium_count"),
+            func.sum(case((PRAnalysis.risk_level == "low", 1), else_=0)).label("low_count"),
+            func.max(PRAnalysis.created_at).label("last_analysis_at"),
+        )
+        .group_by(PRAnalysis.repo_owner, PRAnalysis.repo_name)
+        .order_by(func.avg(PRAnalysis.risk_score).desc())
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        {
+            "full_name": "{}/{}".format(row.repo_owner, row.repo_name),
+            "total_prs": row.total_prs,
+            "avg_risk_score": round(float(row.avg_risk_score), 2) if row.avg_risk_score else 0.0,
+            "critical_count": row.critical_count or 0,
+            "high_count": row.high_count or 0,
+            "medium_count": row.medium_count or 0,
+            "low_count": row.low_count or 0,
+            "last_analysis_at": row.last_analysis_at.isoformat() if row.last_analysis_at else None,
+        }
+        for row in rows
+    ]

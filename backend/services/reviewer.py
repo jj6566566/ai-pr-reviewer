@@ -34,41 +34,52 @@ SYSTEM_PROMPT = """你是一位资深代码评审专家。请对提供的 Pull R
 class ReviewerService:
     def __init__(self, client: Optional[LLMClient] = None):
         self.llm = client or llm_client
+        self._token: str = ""
 
-    def analyze(self, request: AnalyzeRequest) -> AnalyzeResponse:
-        pr_info = github_service.get_pr_info(
-            owner=request.owner,
-            repo=request.repo,
-            pr_number=request.pr_number,
-        )
-        diff_ctx = diff_processor.process(
-            diff_content=pr_info.diff_content,
-            files=pr_info.files,
-        )
-        analysis = self._call_llm(pr_info, diff_ctx)
-        return self._build_response(pr_info, diff_ctx, analysis)
+    def analyze(self, request: AnalyzeRequest, token: str = "") -> AnalyzeResponse:
+        self._token = token
+        try:
+            pr_info = github_service.get_pr_info(
+                owner=request.owner,
+                repo=request.repo,
+                pr_number=request.pr_number,
+                token=token,
+            )
+            diff_ctx = diff_processor.process(
+                diff_content=pr_info.diff_content,
+                files=pr_info.files,
+            )
+            analysis = self._call_llm(pr_info, diff_ctx)
+            return self._build_response(pr_info, diff_ctx, analysis)
+        finally:
+            self._token = ""
 
-    def analyze_stream(self, request: AnalyzeRequest):
-        pr_info = github_service.get_pr_info(
-            owner=request.owner,
-            repo=request.repo,
-            pr_number=request.pr_number,
-        )
-        diff_ctx = diff_processor.process(
-            diff_content=pr_info.diff_content,
-            files=pr_info.files,
-        )
-        yield {"event": "progress", "data": {"stage": "fetched", "files_changed": pr_info.files_changed, "additions": pr_info.additions, "deletions": pr_info.deletions}}
+    def analyze_stream(self, request: AnalyzeRequest, token: str = ""):
+        self._token = token
+        try:
+            pr_info = github_service.get_pr_info(
+                owner=request.owner,
+                repo=request.repo,
+                pr_number=request.pr_number,
+                token=token,
+            )
+            diff_ctx = diff_processor.process(
+                diff_content=pr_info.diff_content,
+                files=pr_info.files,
+            )
+            yield {"event": "progress", "data": {"stage": "fetched", "files_changed": pr_info.files_changed, "additions": pr_info.additions, "deletions": pr_info.deletions}}
 
-        user_message = self._build_user_message(pr_info, diff_ctx)
-        buffer = ""
-        for chunk in self.llm.chat_stream(system_prompt=SYSTEM_PROMPT, user_message=user_message):
-            buffer += chunk
-            yield {"event": "token", "data": chunk}
+            user_message = self._build_user_message(pr_info, diff_ctx)
+            buffer = ""
+            for chunk in self.llm.chat_stream(system_prompt=SYSTEM_PROMPT, user_message=user_message):
+                buffer += chunk
+                yield {"event": "token", "data": chunk}
 
-        analysis = self._parse_response(buffer)
-        response = self._build_response(pr_info, diff_ctx, analysis)
-        yield {"event": "complete", "data": response.model_dump(mode="json")}
+            analysis = self._parse_response(buffer)
+            response = self._build_response(pr_info, diff_ctx, analysis)
+            yield {"event": "complete", "data": response.model_dump(mode="json")}
+        finally:
+            self._token = ""
 
     def _build_response(self, pr_info: PRInfo, diff_ctx: DiffContext, analysis: dict) -> AnalyzeResponse:
         risk_items_raw = analysis.get("risk_items", [])
@@ -272,6 +283,7 @@ class ReviewerService:
                 repo=pr_info.repo,
                 path=fname,
                 ref=pr_info.base_branch,
+                token=self._token,
             )
             if not full_content:
                 continue

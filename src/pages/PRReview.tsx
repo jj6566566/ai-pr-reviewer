@@ -27,6 +27,7 @@ import type {
 } from "@/types/review"
 import { RISK_SEVERITY_CONFIG, RISK_LEVEL_CONFIG, SEVERITY_ORDER } from "@/types/review"
 import { fetchHistory, fetchHistoryDetail, submitFeedback } from "@/api/review"
+import ReviewChat from "@/components/ReviewChat"
 
 const riskLevelOptions = [
   { value: "all", label: "全部等级" },
@@ -76,6 +77,7 @@ export default function PRReview() {
       const matchesSearch =
         !searchQuery ||
         item.pr_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.pr_number.toString().includes(searchQuery.trim()) ||
         `${item.repo_owner}/${item.repo_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.author.toLowerCase().includes(searchQuery.toLowerCase())
 
@@ -420,6 +422,17 @@ export default function PRReview() {
                               })}
                             </div>
                           </div>
+                        )}
+                        {detail && (
+                          <ReviewChat
+                            analysisId={detail.id}
+                            repoOwner={detail.repo_owner}
+                            repoName={detail.repo_name}
+                            prTitle={detail.pr_title}
+                            summary={detail.summary}
+                            riskItems={detail.risk_items}
+                            suggestions={detail.suggestions}
+                          />
                         )}
                       </div>
                     )}
