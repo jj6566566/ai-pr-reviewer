@@ -60,9 +60,9 @@ export default function PRReview() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [riskLevelFilter, setRiskLevelFilter] = useState("all")
-  const [expandedId, setExpandedId] = useState<number | null>(null)
-  const [detail, setDetail] = useState<HistoryDetail | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+  const [detailMap, setDetailMap] = useState<Record<number, HistoryDetail>>({})
+  const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     setLoading(true)
@@ -89,21 +89,31 @@ export default function PRReview() {
   }, [items, searchQuery, riskLevelFilter])
 
   const toggleExpand = async (id: number) => {
-    if (expandedId === id) {
-      setExpandedId(null)
-      setDetail(null)
-      return
-    }
-    setExpandedId(id)
-    setDetail(null)
-    setDetailLoading(true)
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+        return next
+      }
+      next.add(id)
+      return next
+    })
+    setLoadingIds((prev) => new Set(prev).add(id))
     try {
       const d = await fetchHistoryDetail(id)
-      setDetail(d)
+      setDetailMap((prev) => ({ ...prev, [id]: d }))
     } catch {
-      setDetail(null)
+      setDetailMap((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
     } finally {
-      setDetailLoading(false)
+      setLoadingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
     }
   }
 
@@ -182,7 +192,9 @@ export default function PRReview() {
         <div className="space-y-3">
           {filteredItems.map((item) => {
             const levelConfig = RISK_LEVEL_CONFIG[item.risk_level]
-            const isExpanded = expandedId === item.id
+            const isExpanded = expandedIds.has(item.id)
+            const detail = detailMap[item.id]
+            const isLoading = loadingIds.has(item.id)
             return (
               <div
                 key={item.id}
@@ -237,14 +249,14 @@ export default function PRReview() {
 
                 {isExpanded && (
                   <div className="border-t border-[#1e2440] bg-[#0a0e1a] p-5">
-                    {detailLoading && (
+                    {isLoading && (
                       <div className="py-8 text-center text-[#7b829c]">
                         <Loader2 size={24} className="mx-auto mb-2 animate-spin" />
                         <p className="text-sm">加载详情...</p>
                       </div>
                     )}
 
-                    {detail && !detailLoading && (
+                    {detail && !isLoading && (
                       <div className="space-y-4">
                         <div className="flex flex-wrap items-center gap-3 text-xs text-[#7b829c]">
                           <span className="flex items-center gap-1">
