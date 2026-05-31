@@ -27,6 +27,7 @@ import {
   ThumbsDown,
   StopCircle,
   Play,
+  Download,
 } from "lucide-react"
 import type {
   AnalyzeResponse,
@@ -38,6 +39,7 @@ import type {
 } from "@/types/review"
 import { RISK_SEVERITY_CONFIG, RISK_LEVEL_CONFIG, SEVERITY_ORDER } from "@/types/review"
 import { analyzePR, analyzeBatch, analyzeBatchStream, analyzePRStream, submitFeedback, fetchHistoryDetail } from "@/api/review"
+import { authHeaders } from "@/api/auth"
 import { useAuth } from "@/contexts/AuthContext"
 import RepoSelector from "@/components/RepoSelector"
 import PRList from "@/components/PRList"
@@ -299,6 +301,7 @@ export default function AnalyzePage() {
   const [batchCompletedPRs, setBatchCompletedPRs] = useState<AnalyzeResponse[]>([])
 
   const [feedback, setFeedback] = useState<FeedbackState>({})
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
 
   useEffect(() => {
     const idParam = searchParams.get("id")
@@ -522,6 +525,30 @@ export default function AnalyzePage() {
     setBatchPRTokens({})
     setBatchCompletedPRs([])
     handleCancel()
+  }
+
+  const handleExportReport = async (analysisId: number, format: "md" | "docx" | "pdf" = "md") => {
+    setExportMenuOpen(false)
+    try {
+      const res = await fetch(`/api/review/${analysisId}/report?format=${format}`, {
+        headers: authHeaders(),
+      })
+      if (!res.ok) throw new Error("下载失败")
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const disposition = res.headers.get("Content-Disposition") || ""
+      const match = disposition.match(/filename="?(.+?)"?$/i)
+      const ext = format === "docx" ? ".docx" : ".md"
+      a.download = match?.[1] || `review-report-${analysisId}${ext}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      window.open(`/api/review/${analysisId}/report?format=${format}`, "_blank")
+    }
   }
 
   const toggleExpand = (prNum: number) => {
@@ -916,6 +943,41 @@ export default function AnalyzePage() {
                     <span className={`text-[10px] px-2 py-1 rounded-md font-medium ${levelConfig.bgClass} ${levelConfig.textClass}`}>
                       {levelConfig.label}
                     </span>
+                  </div>
+                )}
+
+                {result.analysis_id && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-[#0a0e1a] border border-[#1e2440] text-[#7b829c] hover:text-[#e4e8f1] hover:border-[#7c3aed]/40 transition-all"
+                      title="导出评审报告"
+                    >
+                      <Download size={14} />
+                      导出报告
+                    </button>
+                    {exportMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 w-36 bg-[#131829] border border-[#1e2440] rounded-lg shadow-xl z-50 overflow-hidden">
+                        <button
+                          onClick={() => handleExportReport(result.analysis_id!, "md")}
+                          className="w-full text-left px-3 py-2 text-xs text-[#e4e8f1] hover:bg-[#1a2140] transition-colors flex items-center gap-2"
+                        >
+                          📄 Markdown (.md)
+                        </button>
+                        <button
+                          onClick={() => handleExportReport(result.analysis_id!, "docx")}
+                          className="w-full text-left px-3 py-2 text-xs text-[#e4e8f1] hover:bg-[#1a2140] transition-colors flex items-center gap-2 border-t border-[#1e2440]"
+                        >
+                          📝 Word 文档 (.docx)
+                        </button>
+                        <button
+                          onClick={() => handleExportReport(result.analysis_id!, "pdf")}
+                          className="w-full text-left px-3 py-2 text-xs text-[#e4e8f1] hover:bg-[#1a2140] transition-colors flex items-center gap-2 border-t border-[#1e2440]"
+                        >
+                          📑 PDF 文档 (.pdf)
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

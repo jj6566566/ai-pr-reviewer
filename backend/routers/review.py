@@ -39,6 +39,7 @@ from backend.schemas.review import (
 )
 from backend.services.duplicate_detector import detect_cross_pr_duplicates
 from backend.services.github import github_service
+from backend.services.report import generate_report_docx, generate_report_md, generate_report_pdf
 from backend.services.reviewer import reviewer_service
 from backend.services.rule_engine import DiffFile, run_rules
 from backend.store import (
@@ -764,6 +765,46 @@ async def get_insights(
 ):
     data = await get_insights_data(db, owner, repo)
     return InsightsResponse(**data)
+
+
+@router.get("/{analysis_id}/report")
+async def download_report(
+    analysis_id: int,
+    format: str = Query("md", pattern="^(md|docx|pdf)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    from fastapi.responses import PlainTextResponse, Response
+
+    analysis = await get_analysis_by_id(db, analysis_id)
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="分析记录不存在")
+
+    if format == "docx":
+        buf = generate_report_docx(analysis)
+        filename = f"review-report-{analysis.repo_owner}-{analysis.repo_name}-#{analysis.pr_number}.docx"
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    if format == "pdf":
+        buf = generate_report_pdf(analysis)
+        filename = f"review-report-{analysis.repo_owner}-{analysis.repo_name}-#{analysis.pr_number}.pdf"
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    md = generate_report_md(analysis)
+    filename = f"review-report-{analysis.repo_owner}-{analysis.repo_name}-#{analysis.pr_number}.md"
+
+    return PlainTextResponse(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ---- Code Q&A SSE Endpoint ----
