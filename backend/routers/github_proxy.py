@@ -57,7 +57,7 @@ async def list_repos(
     }
 
     if q:
-        url = f"https://api.github.com/search/repositories?q={q}+fork:true&sort=updated&per_page=30"
+        url = f"https://api.github.com/search/repositories?q={q}+fork:true&sort=updated&per_page=100"
         async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
             resp = await client.get(url, headers=headers)
             resp.raise_for_status()
@@ -71,10 +71,10 @@ async def list_repos(
                     "description": item.get("description"),
                     "private": item["private"],
                 }
-                for item in data.get("items", [])[:30]
+                for item in data.get("items", [])[:100]
             ]
 
-    url = "https://api.github.com/user/repos?sort=updated&per_page=30&type=all"
+    url = "https://api.github.com/user/repos?sort=updated&per_page=100&type=all"
     async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
         resp = await client.get(url, headers=headers)
         if resp.status_code == 401:
@@ -95,7 +95,7 @@ async def list_pulls(
         "Accept": "application/vnd.github.v3+json",
     }
 
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls?state=all&sort=updated&per_page=30"
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls?state=all&sort=updated&per_page=100"
     async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
         resp = await client.get(url, headers=headers)
         if resp.status_code == 401:

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useSearchParams } from "react-router-dom"
 import {
   Search,
@@ -64,6 +64,7 @@ export default function PRReview() {
   const [detailMap, setDetailMap] = useState<Record<number, HistoryDetail>>({})
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set())
   const [exportMenuId, setExportMenuId] = useState<number | null>(null)
+  const [feedbackState, setFeedbackState] = useState<Record<string, { verdict: string; status: 'pending' | 'confirmed' | 'cancelled' }>>({})
 
   useEffect(() => {
     setLoading(true)
@@ -88,6 +89,40 @@ export default function PRReview() {
       return matchesSearch && matchesRisk
     })
   }, [items, searchQuery, riskLevelFilter])
+
+  const handleFeedback = useCallback(async (analysisId: number, index: number, category: string, currentVerdict: string | undefined) => {
+    const key = `${analysisId}_${category}_${index}`
+    const currentState = feedbackState[key]
+    
+    if (currentState?.status === 'confirmed' && currentState.verdict === currentVerdict) {
+      setFeedbackState((prev) => ({
+        ...prev,
+        [key]: { verdict: currentVerdict, status: 'cancelled' }
+      }))
+      return
+    }
+    
+    const newVerdict = currentVerdict === 'accepted' ? 'accepted' : 
+                       category === 'risk_item' ? 'false_positive' : 'not_helpful'
+    
+    setFeedbackState((prev) => ({
+      ...prev,
+      [key]: { verdict: newVerdict, status: 'pending' }
+    }))
+    
+    try {
+      await submitFeedback(analysisId, [{ index, verdict: newVerdict, category }])
+      setFeedbackState((prev) => ({
+        ...prev,
+        [key]: { verdict: newVerdict, status: 'confirmed' }
+      }))
+    } catch {
+      setFeedbackState((prev) => ({
+        ...prev,
+        [key]: { verdict: newVerdict, status: 'cancelled' }
+      }))
+    }
+  }, [feedbackState])
 
   const toggleExpand = async (id: number) => {
     setExpandedIds((prev) => {
@@ -339,6 +374,7 @@ export default function PRReview() {
                                   const Icon = severityIcons[risk.severity]
                                   const fbKey = `risk_item_${i}`
                                   const fb = detail.feedback?.[fbKey]
+                                  const localFb = feedbackState[`${detail.id}_risk_item_${i}`] || (fb ? { verdict: fb.verdict, status: 'confirmed' as const } : undefined)
                                   return (
                                     <div
                                       key={i}
@@ -381,29 +417,48 @@ export default function PRReview() {
                                               建议: {risk.suggestion}
                                             </p>
                                           )}
-                                          <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                            <button
-                                              onClick={() => submitFeedback(detail.id, [{ index: i, verdict: "accepted", category: "risk_item" }])}
-                                              className={`p-1 rounded-md transition-all ${
-                                                fb?.verdict === "accepted"
-                                                  ? "bg-[#06d6a0]/20 text-[#06d6a0]"
-                                                  : "text-[#4a5178] hover:text-[#06d6a0] hover:bg-[#06d6a0]/10"
-                                              }`}
-                                              title="采纳"
-                                            >
-                                              <ThumbsUp size={13} />
-                                            </button>
-                                            <button
-                                              onClick={() => submitFeedback(detail.id, [{ index: i, verdict: "false_positive", category: "risk_item" }])}
-                                              className={`p-1 rounded-md transition-all ${
-                                                fb?.verdict === "false_positive"
-                                                  ? "bg-[#ef4444]/20 text-[#ef4444]"
-                                                  : "text-[#4a5178] hover:text-[#ef4444] hover:bg-[#ef4444]/10"
-                                              }`}
-                                              title="误报"
-                                            >
-                                              <ThumbsDown size={13} />
-                                            </button>
+                                          <div className="flex items-center justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                            <div className="flex items-center gap-1">
+                                              <button
+                                                onClick={() => handleFeedback(detail.id, i, "risk_item", "accepted")}
+                                                className={`p-1.5 rounded-md transition-all ${
+                                                  localFb?.verdict === "accepted" && localFb?.status !== 'cancelled'
+                                                    ? "bg-[#06d6a0]/30 text-[#06d6a0] ring-1 ring-[#06d6a0]/50"
+                                                    : "text-[#4a5178] hover:text-[#06d6a0] hover:bg-[#06d6a0]/10"
+                                                }`}
+                                                title={localFb?.verdict === "accepted" && localFb?.status !== 'cancelled' ? "点击取消采纳" : "采纳"}
+                                              >
+                                                <ThumbsUp size={14} />
+                                              </button>
+                                              <button
+                                                onClick={() => handleFeedback(detail.id, i, "risk_item", "false_positive")}
+                                                className={`p-1.5 rounded-md transition-all ${
+                                                  localFb?.verdict === "false_positive" && localFb?.status !== 'cancelled'
+                                                    ? "bg-[#ef4444]/30 text-[#ef4444] ring-1 ring-[#ef4444]/50"
+                                                    : "text-[#4a5178] hover:text-[#ef4444] hover:bg-[#ef4444]/10"
+                                                }`}
+                                                title={localFb?.verdict === "false_positive" && localFb?.status !== 'cancelled' ? "点击取消误报" : "误报"}
+                                              >
+                                                <ThumbsDown size={14} />
+                                              </button>
+                                            </div>
+                                            {localFb && localFb.status !== 'cancelled' && (
+                                              <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                                localFb.status === 'pending'
+                                                  ? 'bg-[#f59e0b]/20 text-[#f59e0b]'
+                                                  : localFb.verdict === 'accepted'
+                                                    ? 'bg-[#06d6a0]/20 text-[#06d6a0]'
+                                                    : 'bg-[#ef4444]/20 text-[#ef4444]'
+                                              }`}>
+                                                {localFb.status === 'pending' ? '反馈处理中...' :
+                                                 localFb.verdict === 'accepted' ? '已采纳' : '已标记误报'}
+                                              </span>
+                                            )}
+                                            {localFb?.status === 'cancelled' && (
+                                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#4a5178]/20 text-[#4a5178]">
+                                                反馈已取消
+                                              </span>
+                                            )}
                                           </div>
                                         </div>
                                       </div>
@@ -423,6 +478,7 @@ export default function PRReview() {
                               {detail.suggestions.map((s, i) => {
                                 const fbKey = `suggestion_${i}`
                                 const fb = detail.feedback?.[fbKey]
+                                const localFb = feedbackState[`${detail.id}_suggestion_${i}`] || (fb ? { verdict: fb.verdict, status: 'confirmed' as const } : undefined)
                                 return (
                                   <div
                                     key={i}
@@ -447,29 +503,48 @@ export default function PRReview() {
                                         </pre>
                                       </div>
                                     )}
-                                    <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                      <button
-                                        onClick={() => submitFeedback(detail.id, [{ index: i, verdict: "helpful", category: "suggestion" }])}
-                                        className={`p-1 rounded-md transition-all ${
-                                          fb?.verdict === "helpful"
-                                            ? "bg-[#06d6a0]/20 text-[#06d6a0]"
-                                            : "text-[#4a5178] hover:text-[#06d6a0] hover:bg-[#06d6a0]/10"
-                                        }`}
-                                        title="有帮助"
-                                      >
-                                        <ThumbsUp size={13} />
-                                      </button>
-                                      <button
-                                        onClick={() => submitFeedback(detail.id, [{ index: i, verdict: "not_helpful", category: "suggestion" }])}
-                                        className={`p-1 rounded-md transition-all ${
-                                          fb?.verdict === "not_helpful"
-                                            ? "bg-[#ef4444]/20 text-[#ef4444]"
-                                            : "text-[#4a5178] hover:text-[#ef4444] hover:bg-[#ef4444]/10"
-                                        }`}
-                                        title="无帮助"
-                                      >
-                                        <ThumbsDown size={13} />
-                                      </button>
+                                    <div className="flex items-center justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={() => handleFeedback(detail.id, i, "suggestion", "helpful")}
+                                          className={`p-1.5 rounded-md transition-all ${
+                                            localFb?.verdict === "helpful" && localFb?.status !== 'cancelled'
+                                              ? "bg-[#06d6a0]/30 text-[#06d6a0] ring-1 ring-[#06d6a0]/50"
+                                              : "text-[#4a5178] hover:text-[#06d6a0] hover:bg-[#06d6a0]/10"
+                                          }`}
+                                          title={localFb?.verdict === "helpful" && localFb?.status !== 'cancelled' ? "点击取消" : "有帮助"}
+                                        >
+                                          <ThumbsUp size={14} />
+                                        </button>
+                                        <button
+                                          onClick={() => handleFeedback(detail.id, i, "suggestion", "not_helpful")}
+                                          className={`p-1.5 rounded-md transition-all ${
+                                            localFb?.verdict === "not_helpful" && localFb?.status !== 'cancelled'
+                                              ? "bg-[#ef4444]/30 text-[#ef4444] ring-1 ring-[#ef4444]/50"
+                                              : "text-[#4a5178] hover:text-[#ef4444] hover:bg-[#ef4444]/10"
+                                          }`}
+                                          title={localFb?.verdict === "not_helpful" && localFb?.status !== 'cancelled' ? "点击取消" : "无帮助"}
+                                        >
+                                          <ThumbsDown size={14} />
+                                        </button>
+                                      </div>
+                                      {localFb && localFb.status !== 'cancelled' && (
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                          localFb.status === 'pending'
+                                            ? 'bg-[#f59e0b]/20 text-[#f59e0b]'
+                                            : localFb.verdict === 'helpful'
+                                              ? 'bg-[#06d6a0]/20 text-[#06d6a0]'
+                                              : 'bg-[#ef4444]/20 text-[#ef4444]'
+                                        }`}>
+                                          {localFb.status === 'pending' ? '反馈处理中...' :
+                                           localFb.verdict === 'helpful' ? '已采纳' : '无帮助'}
+                                        </span>
+                                      )}
+                                      {localFb?.status === 'cancelled' && (
+                                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#4a5178]/20 text-[#4a5178]">
+                                          反馈已取消
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 )
