@@ -3,9 +3,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
 
 from backend.core.database import SyncSession
 from backend.models.pr_analysis import CustomRule, PRAnalysis
@@ -13,8 +12,6 @@ from backend.schemas.review import (
     AnalyzeResponse,
     CustomRuleCreate,
     CustomRuleUpdate,
-    Discrepancy,
-    FileInfo,
     IntentCheck,
     PRInfoResponse,
     RiskItem,

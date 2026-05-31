@@ -52,7 +52,6 @@ from backend.store import (
     get_recent_analyses,
     get_recent_analysis_by_pr,
     get_recent_analysis_by_pr_sync,
-    get_rule_by_id,
     get_trends,
     list_rules,
     save_analysis,

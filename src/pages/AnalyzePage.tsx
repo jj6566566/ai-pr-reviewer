@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useSearchParams } from "react-router-dom"
 import {
   Loader2,
@@ -10,10 +10,7 @@ import {
   GitBranch,
   Clock,
   FileCode,
-  Plus,
-  Minus,
   Check,
-  X,
   RotateCcw,
   ExternalLink,
   Layers,
@@ -31,14 +28,13 @@ import {
 } from "lucide-react"
 import type {
   AnalyzeResponse,
-  HistoryDetail,
   RiskItem,
   SuggestionItem,
   RuleMatch,
   BatchAnalyzeResponse,
 } from "@/types/review"
 import { RISK_SEVERITY_CONFIG, RISK_LEVEL_CONFIG, SEVERITY_ORDER } from "@/types/review"
-import { analyzePR, analyzeBatch, analyzeBatchStream, analyzePRStream, submitFeedback, fetchHistoryDetail } from "@/api/review"
+import { analyzeBatchStream, analyzePRStream, submitFeedback, fetchHistoryDetail } from "@/api/review"
 import { authHeaders } from "@/api/auth"
 import { useAuth } from "@/contexts/AuthContext"
 import RepoSelector from "@/components/RepoSelector"

@@ -30,7 +30,6 @@ export interface IntentCheckData {
 export default function IntentCheckCard({ data }: { data: IntentCheckData }) {
   const isMatch = data.verdict === "match"
   const isMinor = data.verdict === "minor_deviation"
-  const isMajor = data.verdict === "major_deviation"
 
   const scoreColor = isMatch ? "#06d6a0" : isMinor ? "#f59e0b" : "#ef4444"
   const scoreBg = isMatch ? "bg-[#06d6a0]/10" : isMinor ? "bg-[#f59e0b]/10" : "bg-[#ef4444]/10"

@@ -189,56 +189,25 @@ export default function InsightsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-[#131829] border border-[#1e2440] rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-[#e4e8f1] mb-4 flex items-center gap-2">
-                <TrendingUp size={16} className="text-[#7c3aed]" />
-                跨 PR 重复风险模式
-              </h3>
-              {data.cross_pr_patterns.length === 0 ? (
-                <p className="text-sm text-[#7b829c] text-center py-8">暂未发现跨 PR 重复模式</p>
-              ) : (
-                <div className="space-y-3">
-                  {data.cross_pr_patterns.map((pattern, i) => {
-                    const sevCfg = RISK_SEVERITY_CONFIG[pattern.severity as RiskLevel] || RISK_SEVERITY_CONFIG.low
-                    return (
-                      <div key={i} className="flex items-start gap-3 p-3 bg-[#0a0e1a] rounded-lg border border-[#1e2440]">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold" style={{ backgroundColor: `${sevCfg.color}15`, color: sevCfg.color }}>
-                          {pattern.pr_count}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-[#e4e8f1]" title={pattern.description}>{pattern.description}</p>
-                          <p className="text-[10px] text-[#7b829c] mt-1">
-                            出现在 <span className="text-[#e4e8f1] font-medium">{pattern.pr_count}</span> 个不同 PR 中
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-[#131829] border border-[#1e2440] rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-[#e4e8f1] mb-4 flex items-center gap-2">
-                <Lightbulb size={16} className="text-[#f59e0b]" />
-                编码规范建议
-              </h3>
-              {data.suggested_rules.length === 0 ? (
-                <p className="text-sm text-[#7b829c] text-center py-8">暂无建议</p>
-              ) : (
-                <div className="space-y-2">
-                  {data.suggested_rules.map((rule, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 bg-[#0a0e1a] rounded-lg border border-[#1e2440] transition-all hover:border-[#7c3aed]/30">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#7c3aed]/10 text-[#7c3aed] text-[10px] flex items-center justify-center font-bold">
-                        {i + 1}
-                      </div>
-                      <p className="text-xs text-[#e4e8f1]">{rule}</p>
+          <div className="bg-[#131829] border border-[#1e2440] rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-[#e4e8f1] mb-4 flex items-center gap-2">
+              <Lightbulb size={16} className="text-[#f59e0b]" />
+              编码规范建议
+            </h3>
+            {data.suggested_rules.length === 0 ? (
+              <p className="text-sm text-[#7b829c] text-center py-8">暂无建议</p>
+            ) : (
+              <div className="space-y-2">
+                {data.suggested_rules.map((rule, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 bg-[#0a0e1a] rounded-lg border border-[#1e2440] transition-all hover:border-[#7c3aed]/30">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#7c3aed]/10 text-[#7c3aed] text-[10px] flex items-center justify-center font-bold">
+                      {i + 1}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    <p className="text-xs text-[#e4e8f1]">{rule}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
         </div>
