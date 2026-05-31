@@ -73,7 +73,6 @@ function APIConfigPanel() {
     deepseek_api_key?: string
     github_token?: string
   }>({ deepseek_configured: false, github_configured: false })
-  const [loading, setLoading] = useState(true)
   const [deepseekKey, setDeepseekKey] = useState("")
   const [githubToken, setGithubToken] = useState("")
   const [showDeepseek, setShowDeepseek] = useState(false)
@@ -82,11 +81,9 @@ function APIConfigPanel() {
   const [msg, setMsg] = useState("")
 
   const loadStatus = () => {
-    setLoading(true)
     fetchSettingsStatus()
       .then(setStatus)
       .catch(() => {})
-      .finally(() => setLoading(false))
   }
 
   useEffect(() => {

@@ -1,8 +1,7 @@
 import base64
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
-import certifi
 import httpx
 
 GITHUB_API = "https://api.github.com"

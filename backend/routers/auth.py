@@ -16,9 +16,7 @@ from backend.models.user import User
 from backend.schemas.auth import LoginResponse, UserResponse
 from backend.services.auth import (
     create_jwt,
-    decrypt_token,
     encrypt_token,
-    get_current_user,
     require_user,
 )
 

@@ -11,7 +11,6 @@ import {
   AlertTriangle,
   Lightbulb,
   Bug,
-  Check,
   ExternalLink,
   Loader2,
   GitPullRequest,
@@ -23,8 +22,6 @@ import {
 import type {
   HistoryItem,
   HistoryDetail,
-  RiskItem,
-  SuggestionItem,
 } from "@/types/review"
 import { RISK_SEVERITY_CONFIG, RISK_LEVEL_CONFIG, SEVERITY_ORDER } from "@/types/review"
 import { fetchHistory, fetchHistoryDetail, submitFeedback } from "@/api/review"

@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 SEVERITY_WEIGHTS: Dict[str, int] = {
     "critical": 25,

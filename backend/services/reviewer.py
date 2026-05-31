@@ -6,7 +6,7 @@ from backend.schemas.review import AnalyzeRequest, AnalyzeResponse, Discrepancy,
 from backend.services.diff_processor import DiffContext, diff_processor
 from backend.services.github import PRInfo, github_service
 from backend.services.llm import LLMClient, llm_client
-from backend.services.risk_scorer import RiskCluster, RiskResult, risk_scorer
+from backend.services.risk_scorer import risk_scorer
 
 SYSTEM_PROMPT = """你是一位资深代码评审专家。请对提供的 Pull Request 进行专业分析，输出 JSON 格式结果。
 

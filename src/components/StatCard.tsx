@@ -98,7 +98,7 @@ export default function StatCard({
               </filter>
             </defs>
             <path
-              d={generateSmoothPath(c.glow)}
+              d={generateSmoothPath()}
               fill={`url(#grad-${label})`}
               stroke={c.glow}
               strokeWidth="2"
@@ -126,7 +126,7 @@ export default function StatCard({
   )
 }
 
-function generateSmoothPath(color: string): string {
+function generateSmoothPath(): string {
   const points = Array.from({ length: 10 }, (_, i) => {
     const base = Math.sin(i * 0.8) * 8 + 15
     return base + (Math.random() - 0.5) * 6

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react"
-import { Activity, GitPullRequest, AlertTriangle, Shield, Clock, TrendingDown, TrendingUp } from "lucide-react"
+import { Activity, GitPullRequest, AlertTriangle, Shield, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
