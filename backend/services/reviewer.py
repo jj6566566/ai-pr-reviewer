@@ -1,5 +1,7 @@
 import json
+import math
 import re
+import time
 from typing import List, Optional, Tuple
 
 from backend.schemas.review import AnalyzeRequest, AnalyzeResponse, Discrepancy, FileInfo, IntentCheck, PRInfoResponse, RiskClusterItem, RiskItem, Suggestion
@@ -49,6 +51,7 @@ class ReviewerService:
 
     def analyze(self, request: AnalyzeRequest, token: str = "") -> AnalyzeResponse:
         self._token = token
+        t0 = time.time()
         try:
             pr_info = github_service.get_pr_info(
                 owner=request.owner,
@@ -61,12 +64,14 @@ class ReviewerService:
                 files=pr_info.files,
             )
             analysis = self._call_llm(pr_info, diff_ctx)
-            return self._build_response(pr_info, diff_ctx, analysis)
+            elapsed = time.time() - t0
+            return self._build_response(pr_info, diff_ctx, analysis, elapsed_seconds=elapsed)
         finally:
             self._token = ""
 
     def analyze_stream(self, request: AnalyzeRequest, token: str = ""):
         self._token = token
+        t0 = time.time()
         try:
             pr_info = github_service.get_pr_info(
                 owner=request.owner,
@@ -87,12 +92,13 @@ class ReviewerService:
                 yield {"event": "token", "data": chunk}
 
             analysis = self._parse_response(buffer)
-            response = self._build_response(pr_info, diff_ctx, analysis)
+            elapsed = time.time() - t0
+            response = self._build_response(pr_info, diff_ctx, analysis, elapsed_seconds=elapsed)
             yield {"event": "complete", "data": response.model_dump(mode="json")}
         finally:
             self._token = ""
 
-    def _build_response(self, pr_info: PRInfo, diff_ctx: DiffContext, analysis: dict) -> AnalyzeResponse:
+    def _build_response(self, pr_info: PRInfo, diff_ctx: DiffContext, analysis: dict, elapsed_seconds: float = 0.0) -> AnalyzeResponse:
         risk_items_raw = analysis.get("risk_items", [])
         suggestions_raw = analysis.get("suggestions", [])
 
@@ -157,7 +163,7 @@ class ReviewerService:
             suggestions=validated_suggestions,
             risk_score=risk_result.score,
             risk_level=risk_result.level,
-            estimated_review_minutes=risk_result.estimated_minutes,
+            estimated_review_minutes=max(1, math.ceil(elapsed_seconds / 60)),
             intent_check=intent_check,
             risk_clusters=[RiskClusterItem(
                 category=c.category,

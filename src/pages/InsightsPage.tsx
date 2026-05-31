@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react"
 import { BarChart3, Zap, TrendingUp, Shield, FileCode, AlertTriangle, Lightbulb } from "lucide-react"
-import SideNav from "@/components/SideNav"
-import TopNavbar from "@/components/TopNavbar"
 import StatCard from "@/components/StatCard"
 import { RISK_SEVERITY_CONFIG, type RiskLevel } from "@/types/review"
 
@@ -61,16 +59,10 @@ export default function InsightsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-[#0a0e1a]">
-        <SideNav />
-        <div className="flex-1 flex flex-col">
-          <TopNavbar />
-          <div className="flex-1 flex items-center justify-center">
-            <div className="space-y-4 text-center">
-              <div className="w-12 h-12 rounded-full border-4 border-[#06d6a0] border-t-transparent animate-spin mx-auto" />
-              <p className="text-sm text-[#7b829c]">正在分析历史数据...</p>
-            </div>
-          </div>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="space-y-4 text-center">
+          <div className="w-12 h-12 rounded-full border-4 border-[#06d6a0] border-t-transparent animate-spin mx-auto" />
+          <p className="text-sm text-[#7b829c]">正在分析历史数据...</p>
         </div>
       </div>
     )
@@ -78,16 +70,10 @@ export default function InsightsPage() {
 
   if (!data) {
     return (
-      <div className="flex min-h-screen bg-[#0a0e1a]">
-        <SideNav />
-        <div className="flex-1 flex flex-col">
-          <TopNavbar />
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center text-[#7b829c]">
-              <BarChart3 size={48} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm">暂无分析数据，先分析几个 PR 再来看看吧</p>
-            </div>
-          </div>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center text-[#7b829c]">
+          <BarChart3 size={48} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">暂无分析数据，先分析几个 PR 再来看看吧</p>
         </div>
       </div>
     )
@@ -97,18 +83,14 @@ export default function InsightsPage() {
   const maxRiskCount = Math.max(1, ...data.directory_heatmap.map((d) => d.risk_count))
 
   return (
-    <div className="flex min-h-screen bg-[#0a0e1a]">
-      <SideNav />
-      <div className="flex-1 flex flex-col overflow-auto">
-        <TopNavbar />
-        <div className="p-6 space-y-6">
+    <div className="space-y-6">
 
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-[#e4e8f1]">代码洞察</h2>
-              <p className="text-sm text-[#7b829c] mt-1">基于 {data.total_analyses} 次历史分析的数据洞察</p>
-            </div>
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-[#e4e8f1]">代码洞察</h2>
+          <p className="text-sm text-[#7b829c] mt-1">基于 {data.total_analyses} 次历史分析的数据洞察</p>
+        </div>
+      </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard icon={BarChart3} label="总分析次数" value={data.total_analyses} color="teal" delay={0} />
@@ -210,8 +192,6 @@ export default function InsightsPage() {
             )}
           </div>
 
-        </div>
-      </div>
     </div>
   )
 }
