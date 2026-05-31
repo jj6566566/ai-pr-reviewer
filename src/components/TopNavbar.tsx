@@ -1,12 +1,13 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Search, Bot, ScanLine } from "lucide-react"
+import { Search, Bot, ScanLine, Menu } from "lucide-react"
 import { useStore } from "@/store/useStore"
 import LoginButton from "@/components/LoginButton"
 import NotificationBell from "@/components/NotificationBell"
 
 export default function TopNavbar() {
   const toggleSidebar = useStore((s) => s.toggleSidebar)
+  const toggleMobileMenu = useStore((s) => s.toggleMobileMenu)
   const navigate = useNavigate()
   const [searchValue, setSearchValue] = useState("")
 
@@ -37,8 +38,15 @@ export default function TopNavbar() {
     <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f1324] border-b border-[#1e2440]">
       <div className="flex items-center h-full px-4 md:px-6">
         <button
+          onClick={toggleMobileMenu}
+          className="md:hidden mr-3 p-2 rounded-lg text-[#7b829c] hover:text-[#06d6a0] hover:bg-[#131829] transition-all"
+        >
+          <Menu size={20} />
+        </button>
+
+        <button
           onClick={toggleSidebar}
-          className="mr-3 p-2 rounded-lg text-[#7b829c] hover:text-[#06d6a0] hover:bg-[#131829] transition-all"
+          className="hidden md:flex mr-3 p-2 rounded-lg text-[#7b829c] hover:text-[#06d6a0] hover:bg-[#131829] transition-all"
         >
           <ScanLine size={20} />
         </button>
