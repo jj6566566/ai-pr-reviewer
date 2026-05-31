@@ -52,12 +52,8 @@ export default function TopNavbar() {
         </button>
 
         <a href="/" className="flex items-center gap-2 flex-shrink-0 mr-6">
-          <div className="relative">
+          <div>
             <Bot size={28} className="text-[#06d6a0]" />
-            <ScanLine
-              size={12}
-              className="absolute -bottom-0.5 -right-0.5 text-[#7c3aed]"
-            />
           </div>
           <span className="text-lg font-bold text-[#e4e8f1] tracking-tight">
             Review<span className="text-[#06d6a0]">AI</span>
