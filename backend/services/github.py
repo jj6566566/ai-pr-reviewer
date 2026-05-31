@@ -167,5 +167,26 @@ class GitHubService:
             resp.raise_for_status()
             return resp.json()
 
+    def get_pr_count(self, owner: str, repo: str, token: str) -> int:
+        import re
+
+        headers = self._headers(token)
+        with httpx.Client(
+            base_url=GITHUB_API,
+            headers=headers,
+            verify=False,
+            timeout=15.0,
+        ) as client:
+            resp = client.get(
+                f"/repos/{owner}/{repo}/pulls",
+                params={"state": "all", "per_page": 1},
+            )
+            resp.raise_for_status()
+            link = resp.headers.get("Link", "")
+            match = re.search(r'page=(\d+)>; rel="last"', link)
+            if match:
+                return int(match.group(1))
+            return len(resp.json())
+
 
 github_service = GitHubService()

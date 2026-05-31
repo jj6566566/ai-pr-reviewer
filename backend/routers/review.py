@@ -907,11 +907,13 @@ async def get_repo_health(
     db: AsyncSession = Depends(get_db),
 ):
     """Return aggregated health metrics grouped by repository."""
+    import asyncio
+
     stmt = (
         select(
             PRAnalysis.repo_owner,
             PRAnalysis.repo_name,
-            func.count(PRAnalysis.id).label("total_prs"),
+            func.count(func.distinct(PRAnalysis.pr_number)).label("analyzed_prs"),
             func.avg(PRAnalysis.risk_score).label("avg_risk_score"),
             func.sum(case((PRAnalysis.risk_level == "critical", 1), else_=0)).label("critical_count"),
             func.sum(case((PRAnalysis.risk_level == "high", 1), else_=0)).label("high_count"),
@@ -927,10 +929,25 @@ async def get_repo_health(
     result = await db.execute(stmt)
     rows = result.all()
 
+    token = decrypt_token(user.access_token)
+
+    async def fetch_count(owner, repo):
+        return await asyncio.to_thread(github_service.get_pr_count, owner, repo, token)
+
+    pr_counts: dict[str, int] = {}
+    if rows:
+        tasks = [fetch_count(r.repo_owner, r.repo_name) for r in rows]
+        counts = await asyncio.gather(*tasks, return_exceptions=True)
+        for i, r in enumerate(rows):
+            key = f"{r.repo_owner}/{r.repo_name}"
+            count = counts[i] if not isinstance(counts[i], Exception) else 0
+            pr_counts[key] = count
+
     return [
         {
             "full_name": "{}/{}".format(row.repo_owner, row.repo_name),
-            "total_prs": row.total_prs,
+            "total_prs": pr_counts.get("{}/{}".format(row.repo_owner, row.repo_name), 0),
+            "analyzed_prs": row.analyzed_prs,
             "avg_risk_score": round(float(row.avg_risk_score), 2) if row.avg_risk_score else 0.0,
             "critical_count": row.critical_count or 0,
             "high_count": row.high_count or 0,

@@ -57,7 +57,7 @@ export function analyzePRStream(
   fetch(`${API_BASE}/review/analyze-stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ owner: owner.trim(), repo: repo.trim(), pr_number: prNumber }),
+    body: JSON.stringify({ owner: owner.trim(), repo: repo.trim(), pr_number: prNumber, post_comment: params.postComment ?? false }),
     signal: combinedSignal,
   }).then(async (response) => {
     try {
