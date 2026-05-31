@@ -67,9 +67,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-[#e4e8f1]">仪表盘</h2>
-        <p className="text-sm text-[#7b829c] mt-1">
-          ReviewAI - AI 驱动的代码评审概览
-        </p>
+        <p className="text-sm text-[#7b829c] mt-1">ReviewAI - AI 驱动的代码评审概览</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
