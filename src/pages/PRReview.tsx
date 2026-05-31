@@ -18,6 +18,7 @@ import {
   Zap,
   ThumbsUp,
   ThumbsDown,
+  Download,
 } from "lucide-react"
 import type {
   HistoryItem,
@@ -65,6 +66,7 @@ export default function PRReview() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [detailMap, setDetailMap] = useState<Record<number, HistoryDetail>>({})
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set())
+  const [exportMenuId, setExportMenuId] = useState<number | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -272,6 +274,44 @@ export default function PRReview() {
                             <Clock size={12} />
                             {detail.estimated_review_minutes} 分钟
                           </span>
+
+                          <div className="ml-auto relative">
+                            <button
+                              onClick={() => setExportMenuId(exportMenuId === item.id ? null : item.id)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-[10px] rounded bg-[#131829] border border-[#1e2440] text-[#7b829c] hover:text-[#e4e8f1] hover:border-[#7c3aed]/40 transition-all"
+                            >
+                              <Download size={11} />
+                              导出报告
+                            </button>
+                            {exportMenuId === item.id && (
+                              <div className="absolute right-0 top-full mt-1 w-36 bg-[#131829] border border-[#1e2440] rounded-lg shadow-xl z-50 overflow-hidden">
+                                <a
+                                  href={`/api/review/${item.id}/report?format=md`}
+                                  target="_blank"
+                                  className="w-full text-left px-3 py-2 text-xs text-[#e4e8f1] hover:bg-[#1a2140] transition-colors flex items-center gap-2"
+                                  onClick={() => setExportMenuId(null)}
+                                >
+                                  📄 Markdown (.md)
+                                </a>
+                                <a
+                                  href={`/api/review/${item.id}/report?format=docx`}
+                                  target="_blank"
+                                  className="w-full text-left px-3 py-2 text-xs text-[#e4e8f1] hover:bg-[#1a2140] transition-colors flex items-center gap-2 border-t border-[#1e2440]"
+                                  onClick={() => setExportMenuId(null)}
+                                >
+                                  📝 Word 文档 (.docx)
+                                </a>
+                                <a
+                                  href={`/api/review/${item.id}/report?format=pdf`}
+                                  target="_blank"
+                                  className="w-full text-left px-3 py-2 text-xs text-[#e4e8f1] hover:bg-[#1a2140] transition-colors flex items-center gap-2 border-t border-[#1e2440]"
+                                  onClick={() => setExportMenuId(null)}
+                                >
+                                  📑 PDF 文档 (.pdf)
+                                </a>
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {detail.summary && (
