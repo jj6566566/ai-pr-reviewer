@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+sqlalchemy
+asyncpg
+alembic
+pydantic
+httpx
+openai
+cryptography
+python-dotenv
+certifi
+PyJWT
+PyGithub
+python-multipart
+python-docx
+fpdf2
