@@ -42,7 +42,7 @@
 | ORM | SQLAlchemy 2.0 (async) + asyncpg | 异步数据库操作 |
 | 迁移 | Alembic | 数据库 Schema 版本管理 |
 | 数据库 | PostgreSQL 16 | 关系型数据库 |
-| AI 模型 | DeepSeek (`deepseek-chat`) / OpenAI (`gpt-4o`) | 可切换 |
+| AI 模型 | DeepSeek-V4-Flash (`deepseek-v4-flash`) / OpenAI (`gpt-4o`) | 可切换 |
 | 容器化 | Docker Compose | 数据库 + pgAdmin |
 
 ---
@@ -155,7 +155,7 @@ uvicorn backend.main:app --reload    # → http://localhost:8002
 
 ### 模型选择
 
-默认使用 **DeepSeek (`deepseek-chat`)**，可通过设置切换到 **OpenAI (`gpt-4o`)**。
+默认使用 **DeepSeek-V4-Flash (`deepseek-v4-flash`)**，可通过设置切换到 **OpenAI (`gpt-4o`)**。
 
 | 维度 | DeepSeek | OpenAI |
 |------|----------|--------|

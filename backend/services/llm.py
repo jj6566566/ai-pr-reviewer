@@ -8,7 +8,7 @@ from backend.config import settings
 
 
 class LLMModel(str, Enum):
-    DEEPSEEK = "deepseek-chat"
+    DEEPSEEK = "deepseek-v4-flash"
     OPENAI = "gpt-4o"
 
 
