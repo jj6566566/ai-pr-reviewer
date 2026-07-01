@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -6,10 +8,49 @@ services:
       POSTGRES_USER: pr_review
       POSTGRES_PASSWORD: pr_review_pass
       POSTGRES_DB: pr_review
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pr_review"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: pr-review-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://pr_review:pr_review_pass@postgres:5432/pr_review
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - FERNET_KEY=${FERNET_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pr-review-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
 
   pgadmin:
     image: dpage/pgadmin4:latest
