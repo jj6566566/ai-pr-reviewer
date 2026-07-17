@@ -339,14 +339,6 @@ uvicorn backend.main:app --reload    # → http://localhost:8002
 └── .trae/documents/              # 产品需求 & 技术架构文档
 ```
 
----
-
-## Demo 视频
-
-[【第二批次第三题 AI PR Review助手】](https://b23.tv/0oc10eQ)
-
----
-
 ## 开发说明
 
 - 本仓库为 AI PR Review 助手的前后端代码
