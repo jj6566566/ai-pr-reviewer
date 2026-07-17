@@ -1,8 +1,10 @@
 # AI PR Review 助手
 
-**一款注重评审质量与用户体验的 AI 代码评审工具。**
+**一款注重评审质量与用户体验的 AI 代码评审工具，同时支持 Web 界面和 MCP 协议。**
 
 登录 GitHub 账号后，系统自动拉取你的仓库列表和 PR 列表，点击即可选择要评审的 PR。AI 实时流式输出评审结果，包含风险识别、改进建议、意图一致性检查等。
+
+此外，项目已接入 **MCP 协议（Model Context Protocol）**，可作为 Trae 等 AI Agent 的工具使用，支持通过 stdio 模式调用 PR 分析功能。
 
 ### 核心特色
 
@@ -18,34 +20,37 @@
 
 📄 **报告导出** — 支持 Markdown / Word / PDF 三种格式一键下载完整评审报告。
 
+🔌 **MCP 协议支持** — 接入 MCP 协议，暴露为 AI Agent 工具，支持仓库列表查询、PR 列表查询、PR 代码分析等功能。
+
 ### 完整功能矩阵
 
-| 模块 | 功能 |
-|------|------|
-| **PR 分析** | 单 PR 流式分析、批量分析（2-10 个）、AI 对话追问 |
-| **风险评估** | 严重度分级（critical/high/medium/low）、置信度评分、误报检测 |
-| **意图检查** | PR 描述 vs 代码变更一致性分析、范围漂移识别 |
-| **数据洞察** | 目录风险热力图、高频问题 Top 榜、评审趋势折线图 |
-| **反馈闭环** | 采纳/误报反馈、一键取消、状态实时显示 |
-| **通知监控** | 实时监控仓库 PR 动态、新 PR 推送通知 |
-| **报告导出** | Markdown / Word / PDF 三格式 |
-| **系统设置** | DeepSeek/OpenAI 切换、自定义规则引擎（文本/正则/Glob） |
+| 模块        | 功能                                         |
+| --------- | ------------------------------------------ |
+| **PR 分析** | 单 PR 流式分析、批量分析（2-10 个）、AI 对话追问             |
+| **风险评估**  | 严重度分级（critical/high/medium/low）、置信度评分、误报检测 |
+| **意图检查**  | PR 描述 vs 代码变更一致性分析、范围漂移识别                  |
+| **数据洞察**  | 目录风险热力图、高频问题 Top 榜、评审趋势折线图                 |
+| **反馈闭环**  | 采纳/误报反馈、一键取消、状态实时显示                        |
+| **通知监控**  | 实时监控仓库 PR 动态、新 PR 推送通知                     |
+| **报告导出**  | Markdown / Word / PDF 三格式                  |
+| **系统设置**  | DeepSeek/OpenAI 切换、自定义规则引擎（文本/正则/Glob）     |
 
 ## 技术栈
 
-| 层级 | 技术 | 说明 |
-|------|------|------|
-| 前端 | React 18 + TypeScript + Vite + Tailwind CSS v3 | SPA 单页应用 |
-| 状态管理 | Zustand | 轻量状态管理 |
-| 图标 | Lucide React | SVG 图标库 |
-| 后端 | Python FastAPI | 异步 Web 框架 |
-| ORM | SQLAlchemy 2.0 (async) + asyncpg | 异步数据库操作 |
-| 迁移 | Alembic | 数据库 Schema 版本管理 |
-| 数据库 | PostgreSQL 16 | 关系型数据库 |
-| AI 模型 | DeepSeek-V4-Flash (`deepseek-v4-flash`) / OpenAI (`gpt-4o`) | 可切换 |
-| 容器化 | Docker Compose | 数据库 + pgAdmin |
+| 层级    | 技术                                                          | 说明                  |
+| ----- | ----------------------------------------------------------- | ------------------- |
+| 前端    | React 18 + TypeScript + Vite + Tailwind CSS v3              | SPA 单页应用            |
+| 状态管理  | Zustand                                                     | 轻量状态管理              |
+| 图标    | Lucide React                                                | SVG 图标库             |
+| 后端    | Python FastAPI                                              | 异步 Web 框架           |
+| ORM   | SQLAlchemy 2.0 (async) + asyncpg                            | 异步数据库操作             |
+| 迁移    | Alembic                                                     | 数据库 Schema 版本管理     |
+| 数据库   | PostgreSQL 16                                               | 关系型数据库              |
+| AI 模型 | DeepSeek-V4-Flash (`deepseek-v4-flash`) / OpenAI (`gpt-4o`) | 可切换                 |
+| 容器化   | Docker Compose                                              | 数据库 + pgAdmin       |
+| MCP   | mcp SDK                                                     | stdio 模式 MCP Server |
 
----
+***
 
 ## 快速开始
 
@@ -78,13 +83,13 @@ cp .env.example .env
 
 编辑 `.env`，填入关键配置：
 
-| 变量 | 说明 |
-|------|------|
-| `DEEPSEEK_API_KEY` | DeepSeek API 密钥（默认模型） |
-| `OPENAI_API_KEY` | OpenAI API 密钥（可选，切换到 GPT-4o） |
-| `GITHUB_TOKEN` | GitHub 个人访问令牌（需 `repo` 权限） |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App 凭证 |
-| `FERNET_KEY` | 加密用户 Token 的密钥（见 `.env.example` 生成方式） |
+| 变量                                          | 说明                                    |
+| ------------------------------------------- | ------------------------------------- |
+| `DEEPSEEK_API_KEY`                          | DeepSeek API 密钥（默认模型）                 |
+| `OPENAI_API_KEY`                            | OpenAI API 密钥（可选，切换到 GPT-4o）          |
+| `GITHUB_TOKEN`                              | GitHub 个人访问令牌（需 `repo` 权限）            |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App 凭证                   |
+| `FERNET_KEY`                                | 加密用户 Token 的密钥（见 `.env.example` 生成方式） |
 
 ### 5. 安装依赖
 
@@ -103,18 +108,21 @@ pip install -r requirements.txt
 npm run dev          # → http://localhost:5174
 
 # 后端（另开终端）
-uvicorn backend.main:app --reload    # → http://localhost:8002
+uvicorn backend.main:app --reload    # → http://localhost:8080
 ```
 
----
+***
 
 ## 功能特性
 
 ### 仪表盘
+
 团队代码质量总览：评审趋势折线图、仓库健康度卡片、最近评审历史列表。
 
 ### 单 PR 分析
+
 登录后自动拉取仓库和 PR 列表，点击选择。AI **实时 SSE 流式输出**评审结果：
+
 - 变更摘要（意图、影响范围）
 - 风险代码（严重度分级 + 置信度 + 误报标注）
 - 改进建议（安全/性能/可维护性分类 + 代码片段）
@@ -124,32 +132,40 @@ uvicorn backend.main:app --reload    # → http://localhost:8002
 - AI 对话追问
 
 ### 批量 PR 分析
-一次性选择 2~10 个 PR 并发分析，聚合展示：
+
+一次性选择 2\~10 个 PR 并发分析，聚合展示：
+
 - 风险分布条（各 PR 风险占比）
 - **跨 PR 重复检测**：文件重叠、相似代码片段、重复风险模式
 - 每个 PR 折叠详情
 
 ### 评审队列
+
 历史记录搜索筛选 + 风险等级过滤。反馈功能升级：
+
 - 即时高亮（点击立即响应）
 - 右侧状态标签（处理中/已采纳/已标记/已取消）
 - 一键取消反馈
 
 ### 代码洞察
+
 全量历史聚合分析：目录风险热力图、高频问题 Top 榜、编码规范建议。
 
 ### 报告导出
+
 一键下载 Markdown / Word / PDF 完整报告，含风险评分、意图检查结果。
 
 ### 系统设置
+
 - DeepSeek / OpenAI API 密钥配置
 - GitHub Token 配置及有效性检查
 - 自定义评审规则管理（文本 / 正则 / Glob 匹配）
 
 ### GitHub OAuth
+
 支持 GitHub 账号登录，用户 Token 经 Fernet 加密存储，JWT 鉴权。
 
----
+***
 
 ## 设计思路
 
@@ -157,14 +173,15 @@ uvicorn backend.main:app --reload    # → http://localhost:8002
 
 默认使用 **DeepSeek-V4-Flash (`deepseek-v4-flash`)**，可通过设置切换到 **OpenAI (`gpt-4o`)**。
 
-| 维度 | DeepSeek | OpenAI |
-|------|----------|--------|
-| 成本 | 极低（约 GPT-4 的 1/50） | 较高 |
-| 代码理解 | 优秀，对中文友好 | 顶级 |
-| 响应速度 | 快 | 中等 |
-| 上下文窗口 | 128K tokens | 128K tokens |
+| 维度    | DeepSeek           | OpenAI      |
+| ----- | ------------------ | ----------- |
+| 成本    | 极低（约 GPT-4 的 1/50） | 较高          |
+| 代码理解  | 优秀，对中文友好           | 顶级          |
+| 响应速度  | 快                  | 中等          |
+| 上下文窗口 | 128K tokens        | 128K tokens |
 
 选择 DeepSeek 作为默认模型的核心考量：
+
 1. 成本优势使其适合频繁的自动化批量评审
 2. 中文项目描述和注释的理解能力出色
 3. 通过 `openai` 兼容 SDK 调用，切换模型零代码改动
@@ -214,55 +231,56 @@ uvicorn backend.main:app --reload    # → http://localhost:8002
 5. **团队级度量** — 评审通过率、风险修复周期、代码质量趋势等团队效能指标
 6. **多语言支持** — 扩展至 Java、Go、Rust 等语言的特定规则引擎
 
----
+***
 
 ## 依赖清单
 
 ### 前端
 
-| 包名 | 版本 | 用途 |
-|------|------|------|
-| react | ^18.3.1 | UI 框架 |
-| react-dom | ^18.3.1 | DOM 渲染 |
-| react-router-dom | ^7.3.0 | 前端路由 |
-| zustand | ^5.0.3 | 轻量状态管理 |
-| lucide-react | ^0.511.0 | SVG 图标库 |
-| tailwindcss | ^3.4.17 | 原子化 CSS 框架 |
-| clsx | ^2.1.1 | 条件类名拼接 |
-| tailwind-merge | ^3.0.2 | Tailwind 类名去重合并 |
-| vite | ^6.3.5 | 构建工具 |
-| typescript | ~5.8.3 | 类型系统 |
+| 包名               | 版本       | 用途              |
+| ---------------- | -------- | --------------- |
+| react            | ^18.3.1  | UI 框架           |
+| react-dom        | ^18.3.1  | DOM 渲染          |
+| react-router-dom | ^7.3.0   | 前端路由            |
+| zustand          | ^5.0.3   | 轻量状态管理          |
+| lucide-react     | ^0.511.0 | SVG 图标库         |
+| tailwindcss      | ^3.4.17  | 原子化 CSS 框架      |
+| clsx             | ^2.1.1   | 条件类名拼接          |
+| tailwind-merge   | ^3.0.2   | Tailwind 类名去重合并 |
+| vite             | ^6.3.5   | 构建工具            |
+| typescript       | \~5.8.3  | 类型系统            |
 
 ### 后端
 
-| 包名 | 版本 | 用途 |
-|------|------|------|
-| fastapi | 0.128.8 | 异步 Web 框架 |
-| uvicorn | 0.39.0 | ASGI 服务器 |
-| sqlalchemy | 2.0.50 | 异步 ORM |
-| asyncpg | 0.31.0 | PostgreSQL 异步驱动 |
-| alembic | 1.16.5 | 数据库迁移工具 |
-| pydantic | 2.12.5 | 数据校验与序列化 |
-| httpx | 0.28.1 | 异步 HTTP 客户端（GitHub API / LLM API） |
-| openai | 2.38.0 | OpenAI / DeepSeek 兼容 SDK |
-| cryptography | 48.0.0 | Fernet 对称加密（用户 Token） |
-| python-dotenv | 1.1.1 | `.env` 环境变量加载 |
-| certifi | 2026.5.20 | SSL 证书验证 |
-| PyJWT | 2.13.0 | JWT 签发与验证 |
-| PyGithub | 2.9.1 | GitHub REST API 客户端（Webhook 签名验证） |
-| python-multipart | 0.0.20 | 表单数据解析 |
-| python-docx | 1.2.0 | Word 报告生成 |
-| fpdf2 | 2.8.4 | PDF 报告生成 |
+| 包名               | 版本        | 用途                                |
+| ---------------- | --------- | --------------------------------- |
+| fastapi          | 0.128.8   | 异步 Web 框架                         |
+| uvicorn          | 0.39.0    | ASGI 服务器                          |
+| sqlalchemy       | 2.0.50    | 异步 ORM                            |
+| asyncpg          | 0.31.0    | PostgreSQL 异步驱动                   |
+| alembic          | 1.16.5    | 数据库迁移工具                           |
+| pydantic         | 2.12.5    | 数据校验与序列化                          |
+| httpx            | 0.28.1    | 异步 HTTP 客户端（GitHub API / LLM API） |
+| openai           | 2.38.0    | OpenAI / DeepSeek 兼容 SDK          |
+| cryptography     | 48.0.0    | Fernet 对称加密（用户 Token）             |
+| python-dotenv    | 1.1.1     | `.env` 环境变量加载                     |
+| certifi          | 2026.5.20 | SSL 证书验证                          |
+| PyJWT            | 2.13.0    | JWT 签发与验证                         |
+| PyGithub         | 2.9.1     | GitHub REST API 客户端（Webhook 签名验证） |
+| python-multipart | 0.0.20    | 表单数据解析                            |
+| python-docx      | 1.2.0     | Word 报告生成                         |
+| fpdf2            | 2.8.4     | PDF 报告生成                          |
+| mcp              | >=1.0.0   | MCP 协议 SDK                        |
 
 ### 基础设施
 
-| 组件 | 用途 |
-|------|------|
-| PostgreSQL 16 | 主数据库 |
-| pgAdmin 4 | 数据库管理界面（可选） |
-| Docker Compose | 数据库容器编排 |
+| 组件             | 用途          |
+| -------------- | ----------- |
+| PostgreSQL 16  | 主数据库        |
+| pgAdmin 4      | 数据库管理界面（可选） |
+| Docker Compose | 数据库容器编排     |
 
----
+***
 
 ## 项目结构
 
@@ -339,6 +357,50 @@ uvicorn backend.main:app --reload    # → http://localhost:8002
 └── .trae/documents/              # 产品需求 & 技术架构文档
 ```
 
+## MCP 协议支持
+
+项目已接入 **MCP 协议（Model Context Protocol）**，可作为 AI Agent 的工具使用。
+
+### 配置方式
+
+在项目根目录下的 `mcp.json` 文件已配置好 MCP Server：
+
+```json
+{
+  "mcpServers": {
+    "ReviewAI": {
+      "command": "G:\\project\\project2\\venv\\Scripts\\python.exe",
+      "args": ["backend/mcp_server.py"],
+      "env": {
+        "DEEPSEEK_API_KEY": "${DEEPSEEK_API_KEY}",
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+### 可用工具
+
+| 工具名                 | 描述             | 参数                           |
+| ------------------- | -------------- | ---------------------------- |
+| `get_repos`         | 获取 GitHub 仓库列表 | `token`（可选）, `search`（可选）    |
+| `get_prs`           | 获取指定仓库的 PR 列表  | `owner`, `repo`, `state`（可选） |
+| `analyze_pr`        | 分析 PR 代码变更     | `owner`, `repo`, `pr_number` |
+| `analyze_pr_stream` | 流式分析 PR（实时进度）  | `owner`, `repo`, `pr_number` |
+| `get_server_info`   | 获取服务器信息        | 无                            |
+
+### 使用流程
+
+1. 在 Trae 中添加 MCP Server，选择 `mcp.json` 文件
+2. 调用 `get_repos` 获取仓库列表
+3. 调用 `get_prs` 获取指定仓库的 PR 列表
+4. 调用 `analyze_pr` 分析具体的 PR
+
+> **注意**：GitHub Token 会自动从数据库中已登录用户的记录中解密获取，无需手动配置。
+
+***
+
 ## 开发说明
 
 - 本仓库为 AI PR Review 助手的前后端代码
@@ -346,3 +408,4 @@ uvicorn backend.main:app --reload    # → http://localhost:8002
 - 后端基于 FastAPI 异步框架，支持 SSE 流式输出和数据库连接池
 - 主分支 `main` 始终保持可运行状态
 - 所有第三方依赖已在上方"依赖清单"中列明
+
