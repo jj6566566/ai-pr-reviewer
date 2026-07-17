@@ -1,8 +1,10 @@
 # AI PR Review 助手
 
-**一款注重评审质量与用户体验的 AI 代码评审工具。**
+**一款注重评审质量与用户体验的 AI 代码评审工具，同时支持 Web 界面和 MCP 协议。**
 
 登录 GitHub 账号后，系统自动拉取你的仓库列表和 PR 列表，点击即可选择要评审的 PR。AI 实时流式输出评审结果，包含风险识别、改进建议、意图一致性检查等。
+
+此外，项目已接入 **MCP 协议（Model Context Protocol）**，可作为 Trae 等 AI Agent 的工具使用，支持通过 stdio 模式调用 PR 分析功能。
 
 ### 核心特色
 
@@ -17,6 +19,8 @@
 📊 **跨 PR 重复检测** — 批量分析时自动识别：文件重叠、相似代码片段、重复风险模式，避免重复修复。
 
 📄 **报告导出** — 支持 Markdown / Word / PDF 三种格式一键下载完整评审报告。
+
+🔌 **MCP 协议支持** — 接入 MCP 协议，暴露为 AI Agent 工具，支持仓库列表查询、PR 列表查询、PR 代码分析等功能。
 
 ### 完整功能矩阵
 
@@ -44,6 +48,7 @@
 | 数据库 | PostgreSQL 16 | 关系型数据库 |
 | AI 模型 | DeepSeek-V4-Flash (`deepseek-v4-flash`) / OpenAI (`gpt-4o`) | 可切换 |
 | 容器化 | Docker Compose | 数据库 + pgAdmin |
+| MCP | mcp SDK | stdio 模式 MCP Server |
 
 ---
 
@@ -103,7 +108,7 @@ pip install -r requirements.txt
 npm run dev          # → http://localhost:5174
 
 # 后端（另开终端）
-uvicorn backend.main:app --reload    # → http://localhost:8002
+uvicorn backend.main:app --reload    # → http://localhost:8080
 ```
 
 ---
@@ -253,6 +258,7 @@ uvicorn backend.main:app --reload    # → http://localhost:8002
 | python-multipart | 0.0.20 | 表单数据解析 |
 | python-docx | 1.2.0 | Word 报告生成 |
 | fpdf2 | 2.8.4 | PDF 报告生成 |
+| mcp | >=1.0.0 | MCP 协议 SDK |
 
 ### 基础设施
 
@@ -341,9 +347,47 @@ uvicorn backend.main:app --reload    # → http://localhost:8002
 
 ---
 
-## Demo 视频
+## MCP 协议支持
 
-[【第二批次第三题 AI PR Review助手】](https://b23.tv/0oc10eQ)
+项目已接入 **MCP 协议（Model Context Protocol）**，可作为 AI Agent 的工具使用。
+
+### 配置方式
+
+在项目根目录下的 `mcp.json` 文件已配置好 MCP Server：
+
+```json
+{
+  "mcpServers": {
+    "ReviewAI": {
+      "command": "G:\\project\\project2\\venv\\Scripts\\python.exe",
+      "args": ["backend/mcp_server.py"],
+      "env": {
+        "DEEPSEEK_API_KEY": "${DEEPSEEK_API_KEY}",
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+### 可用工具
+
+| 工具名 | 描述 | 参数 |
+|--------|------|------|
+| `get_repos` | 获取 GitHub 仓库列表 | `token`（可选）, `search`（可选） |
+| `get_prs` | 获取指定仓库的 PR 列表 | `owner`, `repo`, `state`（可选） |
+| `analyze_pr` | 分析 PR 代码变更 | `owner`, `repo`, `pr_number` |
+| `analyze_pr_stream` | 流式分析 PR（实时进度） | `owner`, `repo`, `pr_number` |
+| `get_server_info` | 获取服务器信息 | 无 |
+
+### 使用流程
+
+1. 在 Trae 中添加 MCP Server，选择 `mcp.json` 文件
+2. 调用 `get_repos` 获取仓库列表
+3. 调用 `get_prs` 获取指定仓库的 PR 列表
+4. 调用 `analyze_pr` 分析具体的 PR
+
+> **注意**：GitHub Token 会自动从数据库中已登录用户的记录中解密获取，无需手动配置。
 
 ---
 
