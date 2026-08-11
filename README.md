@@ -413,9 +413,9 @@ uvicorn backend.main:app --reload    # → http://localhost:8080
 
 ## 关于作者
 
-张俊杰，2026 届本科，AI 应用开发方向。本项目为独立开发（2026.05–06）。
+张俊杰，AI 应用开发方向。本项目为独立开发（2026.05–06）。
 
 - GitHub：[jj6566566](https://github.com/jj6566566)
-- 同作者项目：[Entrel — 角色主观记忆驱动的多 Agent 对话系统](https://github.com/jj6566566/Entrel) · [灵机 — 大模型应用实践平台](https://github.com/jj6566566/lingji-divination)
+- 同作者项目：[Entrel — AI 角色记忆框架（开发中）](https://github.com/jj6566566/Entrel) · [灵机 — 大模型应用实践平台](https://github.com/jj6566566/lingji-divination)
 - 技术文章：[《把市面上的 AI 记忆系统全看了一遍之后》](https://jj6566566.github.io)
 - 邮箱：13115454692@163.com
