@@ -6,6 +6,8 @@
 
 此外，项目已接入 **MCP 协议（Model Context Protocol）**，可作为 Trae 等 AI Agent 的工具使用，支持通过 stdio 模式调用 PR 分析功能。
 
+> **为什么做这个**：大多数 AI 评审工具停在"把 diff 丢给 LLM"。这个项目想回答的是——怎么让 AI 评审**可信**：PR 描述与代码变更的意图一致性评分、每条风险的置信度计算与误报标注、用户反馈闭环、24h 智能缓存，最后把整个能力封装成 MCP Server，让 AI 编辑器可以直接调用。独立开发（2026.05–06）。
+
 ### 核心特色
 
 🚀 **意图一致性检查** — AI 自动对比 PR 标题/描述与实际代码变更，识别范围漂移、隐含破坏性改动等「名不副实」的问题，给出一致性评分（0-100）。
@@ -369,7 +371,7 @@ uvicorn backend.main:app --reload    # → http://localhost:8080
 {
   "mcpServers": {
     "ReviewAI": {
-      "command": "G:\\project\\project2\\venv\\Scripts\\python.exe",
+      "command": "python",
       "args": ["backend/mcp_server.py"],
       "env": {
         "DEEPSEEK_API_KEY": "${DEEPSEEK_API_KEY}",
@@ -409,3 +411,11 @@ uvicorn backend.main:app --reload    # → http://localhost:8080
 - 主分支 `main` 始终保持可运行状态
 - 所有第三方依赖已在上方"依赖清单"中列明
 
+## 关于作者
+
+张俊杰，2026 届本科，AI 应用开发方向。本项目为独立开发（2026.05–06）。
+
+- GitHub：[jj6566566](https://github.com/jj6566566)
+- 同作者项目：[Entrel — 角色主观记忆驱动的多 Agent 对话系统](https://github.com/jj6566566/Entrel) · [灵机 — 大模型应用实践平台](https://github.com/jj6566566/lingji-divination)
+- 技术文章：[《把市面上的 AI 记忆系统全看了一遍之后》](https://jj6566566.github.io)
+- 邮箱：13115454692@163.com
