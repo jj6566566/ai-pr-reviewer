@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "ReviewAI": {
-      "command": "G:\\project\\project2\\venv\\Scripts\\python.exe",
+      "command": "python",
       "args": ["backend/mcp_server.py"],
       "env": {
         "DEEPSEEK_API_KEY": "${DEEPSEEK_API_KEY}",
